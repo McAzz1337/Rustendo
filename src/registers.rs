@@ -1,0 +1,581 @@
+use crate::instruction::Target;
+use crate::utils;
+use std::ptr;
+
+pub struct Registers {
+    pub a: u8,
+    pub b: u8,
+    pub c: u8,
+    pub d: u8,
+    pub e: u8,
+    pub f: u8,
+    pub g: u8,
+    pub h: u8,
+    pub hl: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Flag {
+    Zero,
+    Carry,
+    HalfCarry,
+    Sub,
+    NotZero,
+    NotCarry,
+    NotHalfCarry,
+}
+
+impl Registers {
+    pub fn new() -> Registers {
+        Registers {
+            a: 0,
+            b: 0,
+            c: 0,
+            d: 0,
+            e: 0,
+            f: 0,
+            g: 0,
+            h: 0,
+            hl: 0,
+        }
+    }
+
+    pub fn get_flag(&self, flag: Flag) -> bool {
+        match flag {
+            Flag::Zero => {
+                return (self.f >> 7) == 1;
+            }
+            Flag::Carry => {
+                return (self.f & (1 << 4)) >= 1;
+            }
+            Flag::HalfCarry => {
+                return (self.f & (1 << 5)) >= 1;
+            }
+            Flag::Sub => {
+                return (self.f & (1 << 6)) >= 1;
+            }
+            Flag::NotZero => {
+                return (self.f >> 7) == 0;
+            }
+            Flag::NotCarry => {
+                return (self.f & (1 << 4)) == 0;
+            }
+            Flag::NotHalfCarry => {
+                return (self.f & (1 << 5)) == 0;
+            }
+        }
+    }
+
+    pub fn set_flag(&mut self, flag: Flag, v: bool) {
+        let mut mask = 1;
+
+        match flag {
+            Flag::Zero => {
+                mask = mask << 7;
+            }
+            Flag::Carry => {
+                mask = mask << 4;
+            }
+            Flag::HalfCarry => {
+                mask = mask << 5;
+            }
+            Flag::Sub => {
+                mask = mask << 6;
+            }
+            _ => {
+                panic!("Invalid flag as Input!");
+            }
+        }
+
+        if !v {
+            mask = !mask;
+            self.f = self.f & mask;
+        } else {
+            self.f = self.f | mask;
+        }
+    }
+
+    pub fn rotate_right(&mut self, reg: Target) {
+        match reg {
+            Target::A => {
+                let x = (self.a & 1) << 7;
+                self.a = self.a >> 1;
+                self.a = self.a | x;
+            }
+            Target::B => {
+                let x = (self.b & 1) << 7;
+                self.b = self.b >> 1;
+                self.b = self.b | x;
+            }
+            Target::C => {
+                let x = (self.c & 1) << 7;
+                self.c = self.c >> 1;
+                self.c = self.c | x;
+            }
+            Target::D => {
+                let x = (self.d & 1) << 7;
+                self.d = self.d >> 1;
+                self.d = self.d | x;
+            }
+            Target::E => {
+                let x = (self.e & 1) << 7;
+                self.e = self.e >> 1;
+                self.e = self.e | x;
+            }
+            Target::F => {
+                let x = (self.f & 1) << 7;
+                self.f = self.f >> 1;
+                self.f = self.f | x;
+            }
+            Target::G => {
+                let x = (self.g & 1) << 7;
+                self.g = self.g >> 1;
+                self.g = self.g | x;
+            }
+            Target::H => {
+                let x = (self.h & 1) << 7;
+                self.h = self.h >> 1;
+                self.h = self.h | x;
+            }
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+    }
+
+    pub fn rotate_left(&mut self, reg: Target) {
+        match reg {
+            Target::A => {
+                let x = (self.a & 0b10000000) >> 7;
+                self.a = self.a << 1;
+                self.a = self.a | x;
+            }
+            Target::B => {
+                let x = (self.b & 0b10000000) >> 7;
+                self.b = self.b << 1;
+                self.b = self.b | x;
+            }
+            Target::C => {
+                let x = (self.c & 0b10000000) >> 7;
+                self.c = self.c << 1;
+                self.c = self.c | x;
+            }
+            Target::D => {
+                let x = (self.d & 0b10000000) >> 7;
+                self.d = self.d << 1;
+                self.d = self.d | x;
+            }
+            Target::E => {
+                let x = (self.e & 0b10000000) >> 7;
+                self.e = self.e << 1;
+                self.e = self.e | x;
+            }
+            Target::F => {
+                let x = (self.f & 0b10000000) >> 7;
+                self.f = self.f << 1;
+                self.f = self.f | x;
+            }
+            Target::G => {
+                let x = (self.g & 0b10000000) >> 7;
+                self.g = self.g << 1;
+                self.g = self.g | x;
+            }
+            Target::H => {
+                let x = (self.h & 0b10000000) >> 7;
+                self.h = self.h << 1;
+                self.h = self.h | x;
+            }
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+    }
+
+    pub fn shift_right(&mut self, reg: Target) {
+        match reg {
+            Target::A => {
+                self.a = self.a >> 1;
+            }
+            Target::B => {
+                self.b = self.b >> 1;
+            }
+            Target::C => {
+                self.c = self.c >> 1;
+            }
+            Target::D => {
+                self.d = self.d >> 1;
+            }
+            Target::E => {
+                self.e = self.e >> 1;
+            }
+            Target::F => {
+                self.f = self.f >> 1;
+            }
+            Target::G => {
+                self.g = self.g >> 1;
+            }
+            Target::H => {
+                self.h = self.h >> 1;
+            }
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+    }
+
+    pub fn shift_left(&mut self, reg: Target) {
+        match reg {
+            Target::A => {
+                self.a = self.a << 1;
+            }
+            Target::B => {
+                self.b = self.b << 1;
+            }
+            Target::C => {
+                self.c = self.c << 1;
+            }
+            Target::D => {
+                self.d = self.d << 1;
+            }
+            Target::E => {
+                self.e = self.e << 1;
+            }
+            Target::F => {
+                self.f = self.f << 1;
+            }
+            Target::G => {
+                self.g = self.g << 1;
+            }
+            Target::H => {
+                self.h = self.h << 1;
+            }
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+    }
+
+    pub fn get_bit(&self, reg: Target, bit: &u32) -> bool {
+        let mask = 1 << bit;
+        match reg {
+            Target::A => return (self.a & mask) >= 1,
+            Target::B => return (self.b & mask) >= 1,
+            Target::C => return (self.c & mask) >= 1,
+            Target::D => return (self.d & mask) >= 1,
+            Target::E => return (self.e & mask) >= 1,
+            Target::F => return (self.f & mask) >= 1,
+            Target::G => return (self.g & mask) >= 1,
+            Target::H => return (self.h & mask) >= 1,
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+    }
+
+    pub fn set_bit(&mut self, reg: Target, bit: &u32, v: u8) {
+        if v == 1 {
+            let mask = v << bit;
+            match reg {
+                Target::A => self.a = self.a | mask,
+                Target::B => self.b = self.b | mask,
+                Target::C => self.c = self.c | mask,
+                Target::D => self.d = self.d | mask,
+                Target::E => self.e = self.e | mask,
+                Target::F => self.f = self.f | mask,
+                Target::G => self.g = self.g | mask,
+                Target::H => self.h = self.h | mask,
+                _ => {
+                    panic!("Unimplemented");
+                }
+            }
+        } else {
+            let mut mask = 0b1111111;
+            mask = mask ^ (1 << bit);
+            match reg {
+                Target::A => self.a = self.a & mask,
+                Target::B => self.b = self.b & mask,
+                Target::C => self.c = self.c & mask,
+                Target::D => self.d = self.d & mask,
+                Target::E => self.e = self.e & mask,
+                Target::F => self.f = self.f & mask,
+                Target::G => self.g = self.g & mask,
+                Target::H => self.h = self.h & mask,
+                _ => {
+                    panic!("Unimplemented");
+                }
+            }
+        }
+    }
+
+    pub fn swap(&mut self, reg: Target) {
+        match reg {
+            Target::A => {
+                let lower = self.a & 0xF;
+                self.a = self.a >> 4;
+                self.a = self.a | (lower << 4);
+            }
+            Target::B => {
+                let lower = self.b & 0xF;
+                self.b = self.b >> 4;
+                self.b = self.b | (lower << 4);
+            }
+            Target::C => {
+                let lower = self.c & 0xF;
+                self.c = self.c >> 4;
+                self.c = self.c | (lower << 4);
+            }
+            Target::D => {
+                let lower = self.d & 0xF;
+                self.d = self.d >> 4;
+                self.d = self.d | (lower << 4);
+            }
+            Target::E => {
+                let lower = self.e & 0xF;
+                self.e = self.e >> 4;
+                self.e = self.e | (lower << 4);
+            }
+            Target::F => {
+                let lower = self.f & 0xF;
+                self.f = self.f >> 4;
+                self.f = self.f | (lower << 4);
+            }
+            Target::G => {
+                let lower = self.g & 0xF;
+                self.g = self.g >> 4;
+                self.g = self.g | (lower << 4);
+            }
+            Target::H => {
+                let lower = self.h & 0xF;
+                self.h = self.h >> 4;
+                self.h = self.h | (lower << 4);
+            }
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+    }
+
+    pub fn load_from_register(&mut self, target: Target, src: Target) {
+        let mut _dst: *mut u8 = ptr::null_mut();
+        let mut _value: *const u8 = ptr::null_mut();
+
+        match target {
+            Target::A => _dst = &mut self.a,
+            Target::B => _dst = &mut self.b,
+            Target::C => _dst = &mut self.c,
+            Target::D => _dst = &mut self.d,
+            Target::E => _dst = &mut self.e,
+            Target::F => _dst = &mut self.f,
+            Target::G => _dst = &mut self.g,
+            Target::H => _dst = &mut self.h,
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+
+        match src {
+            Target::A => _value = &mut self.a,
+            Target::B => _value = &mut self.b,
+            Target::C => _value = &mut self.c,
+            Target::D => _value = &mut self.d,
+            Target::E => _value = &mut self.e,
+            Target::F => _value = &mut self.f,
+            Target::G => _value = &mut self.g,
+            Target::H => _value = &mut self.h,
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+        unsafe {
+            self.set_flag(Flag::Carry, *_dst as i32 + *_value as i32 > 255);
+
+            *_dst = *_value;
+        }
+    }
+
+    pub fn load(&mut self, reg: Target, v: u8) {
+        match reg {
+            Target::A => self.a = v,
+            Target::B => self.b = v,
+            Target::C => self.c = v,
+            Target::D => self.d = v,
+            Target::E => self.e = v,
+            Target::F => self.f = v,
+            Target::G => self.g = v,
+            Target::H => self.g = v,
+            _ => {
+                panic!("Unimplemented")
+            }
+        }
+    }
+
+    #[allow(unused_assignments)]
+    pub fn add(&mut self, reg: Target) {
+        let mut op: *mut u8 = ptr::null_mut();
+        unsafe {
+            match reg {
+                Target::A => op = &mut self.a,
+                Target::B => op = &mut self.b,
+                Target::C => op = &mut self.c,
+                Target::D => op = &mut self.d,
+                Target::E => op = &mut self.e,
+                Target::F => op = &mut self.f,
+                Target::G => op = &mut self.g,
+                Target::H => op = &mut self.h,
+                _ => {
+                    panic!("Unimplemented")
+                }
+            }
+
+            if self.a as i32 + *op as i32 > 255 {
+                self.set_flag(Flag::Carry, true);
+            } else {
+                self.set_flag(Flag::Carry, false);
+            }
+
+            self.a = self.a.wrapping_add(*op);
+        }
+    }
+
+    pub fn register_as_bit_string(&self, reg: Target) -> String {
+        match reg {
+            Target::A => return utils::as_bit_string(self.a),
+            Target::B => return utils::as_bit_string(self.b),
+            Target::C => return utils::as_bit_string(self.c),
+            Target::D => return utils::as_bit_string(self.d),
+            Target::E => return utils::as_bit_string(self.e),
+            Target::F => return utils::as_bit_string(self.f),
+            Target::G => return utils::as_bit_string(self.g),
+            Target::H => return utils::as_bit_string(self.h),
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+    }
+
+    pub fn register_as_hex_string(&self, reg: Target) -> String {
+        match reg {
+            Target::A => return utils::as_hex_string(self.a),
+            Target::B => return utils::as_hex_string(self.b),
+            Target::C => return utils::as_hex_string(self.c),
+            Target::D => return utils::as_hex_string(self.d),
+            Target::E => return utils::as_hex_string(self.e),
+            Target::F => return utils::as_hex_string(self.f),
+            Target::G => return utils::as_hex_string(self.g),
+            Target::H => return utils::as_hex_string(self.h),
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+    }
+}
+
+#[test]
+fn test_add() {
+    let mut reg = Registers::new();
+
+    reg.a = 10;
+    reg.b = 5;
+
+    reg.add(Target::B);
+    assert!(reg.a == 15);
+
+    reg.a = 255;
+    reg.add(Target::B);
+    assert!(reg.get_flag(Flag::Carry));
+}
+
+#[test]
+fn test_rotate() {
+    let mut reg = Registers::new();
+    reg.a = 1;
+    reg.rotate_right(Target::A);
+    assert!(reg.a == 128);
+
+    reg.rotate_left(Target::A);
+    assert!(reg.a == 1);
+}
+
+#[test]
+fn test_shift() {
+    let mut reg = Registers::new();
+    reg.a = 1;
+    reg.shift_left(Target::A);
+    assert!(reg.a == 2);
+
+    reg.shift_right(Target::A);
+    assert!(reg.a == 1);
+}
+
+#[test]
+fn test_bit() {
+    let mut reg = Registers::new();
+    reg.a = 1;
+    assert!(reg.get_bit(Target::A, &0));
+
+    reg.a = 2;
+    assert!(!reg.get_bit(Target::A, &0));
+    assert!(reg.get_bit(Target::A, &1));
+}
+
+#[test]
+fn test_set_bit() {
+    let mut reg = Registers::new();
+    reg.set_bit(Target::A, &0, 1);
+    assert!(reg.a == 1);
+    reg.set_bit(Target::A, &2, 1);
+    assert!(reg.a == 5);
+    reg.set_bit(Target::A, &0, 0);
+    assert!(reg.a == 4);
+}
+
+#[test]
+fn test_swap() {
+    let mut reg = Registers::new();
+    reg.a = 1;
+    reg.swap(Target::A);
+    assert!(reg.a == 16);
+
+    reg.a = 128 + 4;
+    reg.swap(Target::A);
+    assert!(reg.a == 0b01001000);
+}
+
+#[test]
+fn test_convert_to_bit_string() {
+    let mut reg = Registers::new();
+
+    reg.a = 5;
+
+    assert!(reg.register_as_bit_string(Target::A).as_str().as_bytes() == "0b00000101".as_bytes());
+}
+
+#[test]
+fn tes_convert_to_hex_string() {
+    let mut reg = Registers::new();
+
+    reg.a = 128;
+
+    assert!(reg.register_as_hex_string(Target::A).as_str().as_bytes() == "0x80".as_bytes());
+
+    reg.a = 128 + 15;
+
+    assert!(reg.register_as_hex_string(Target::A).as_str().as_bytes() == "0x8F".as_bytes());
+}
+
+#[test]
+fn test_flag_setters() {
+    let mut r = Registers::new();
+
+    r.set_flag(Flag::Zero, true);
+    assert!(r.get_flag(Flag::Zero));
+
+    r.set_flag(Flag::Carry, true);
+    assert!(r.get_flag(Flag::Carry));
+
+    r.set_flag(Flag::HalfCarry, true);
+    assert!(r.get_flag(Flag::HalfCarry));
+
+    r.set_flag(Flag::Sub, true);
+    assert!(r.get_flag(Flag::Sub));
+}
