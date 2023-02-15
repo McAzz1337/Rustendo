@@ -5,6 +5,8 @@ use crate::Memory;
 use crate::OpCode;
 use crate::Registers;
 
+use std::ptr;
+
 #[allow(dead_code)]
 pub struct Cpu {
     registers: Registers,
@@ -77,7 +79,7 @@ impl Cpu {
                 }
             },
             OpCode::ADD(target) => {
-                self.registers.add(target);
+                self.add(target);
             }
             OpCode::ADDHL(target) => {
                 self.add_hl(target);
@@ -200,19 +202,33 @@ impl Cpu {
     }
 
     pub fn add(&mut self, src: Target) {
+        let v;
+
         match src {
-            Target::A => self.registers.a = self.registers.a.wrapping_add(self.registers.a),
-            Target::B => self.registers.a = self.registers.a.wrapping_add(self.registers.b),
-            Target::C => self.registers.a = self.registers.a.wrapping_add(self.registers.c),
-            Target::D => self.registers.a = self.registers.a.wrapping_add(self.registers.d),
-            Target::E => self.registers.a = self.registers.a.wrapping_add(self.registers.e),
-            Target::F => self.registers.a = self.registers.a.wrapping_add(self.registers.f),
-            Target::G => self.registers.a = self.registers.a.wrapping_add(self.registers.g),
-            Target::H => self.registers.a = self.registers.a.wrapping_add(self.registers.h),
+            Target::A => v = self.registers.a,
+            Target::B => v = self.registers.b,
+            Target::C => v = self.registers.c,
+            Target::D => v = self.registers.d,
+            Target::E => v = self.registers.e,
+            Target::F => v = self.registers.f,
+            Target::G => v = self.registers.g,
+            Target::H => v = self.registers.h,
             _ => {
                 panic!("Invalid Target");
             }
         }
+
+        self.registers
+            .set_flag(Flag::Carry, self.registers.a as i32 + v as i32 > 255);
+
+        self.registers.set_flag(
+            Flag::HalfCarry,
+            self.registers.a < 0b1111 && self.registers.a + v >= 0b1111,
+        );
+
+        self.registers.a = self.registers.a.wrapping_add(v);
+        self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+        self.registers.set_flag(Flag::Sub, false);
     }
 
     pub fn add_hl(&mut self, src: Target) {
@@ -232,72 +248,96 @@ impl Cpu {
     }
 
     pub fn sub(&mut self, src: Target) {
+        let v;
         match src {
-            Target::A => self.registers.a = self.registers.a.wrapping_sub(self.registers.a),
-            Target::B => self.registers.a = self.registers.a.wrapping_sub(self.registers.b),
-            Target::C => self.registers.a = self.registers.a.wrapping_sub(self.registers.c),
-            Target::D => self.registers.a = self.registers.a.wrapping_sub(self.registers.d),
-            Target::E => self.registers.a = self.registers.a.wrapping_sub(self.registers.e),
-            Target::F => self.registers.a = self.registers.a.wrapping_sub(self.registers.f),
-            Target::G => self.registers.a = self.registers.a.wrapping_sub(self.registers.g),
-            Target::H => self.registers.a = self.registers.a.wrapping_sub(self.registers.h),
+            Target::A => v = self.registers.a,
+            Target::B => v = self.registers.b,
+            Target::C => v = self.registers.c,
+            Target::D => v = self.registers.d,
+            Target::E => v = self.registers.e,
+            Target::F => v = self.registers.f,
+            Target::G => v = self.registers.g,
+            Target::H => v = self.registers.h,
             _ => {
                 panic!("Invalid Target");
             }
         }
+
+        self.registers.set_flag(Flag::Zero, v >= self.registers.a);
+
+        self.registers.a = self.registers.a.wrapping_sub(v);
+        self.registers.set_flag(Flag::Sub, true);
+        self.registers.set_flag(Flag::HalfCarry, false);
+        self.registers.set_flag(Flag::Carry, false);
     }
 
     pub fn inc(&mut self, target: Target) {
+        let v: *mut u8;
         match target {
-            Target::A => self.registers.a = self.registers.a.wrapping_add(1),
-            Target::B => self.registers.b = self.registers.b.wrapping_add(1),
-            Target::C => self.registers.c = self.registers.c.wrapping_add(1),
-            Target::D => self.registers.d = self.registers.d.wrapping_add(1),
-            Target::E => self.registers.e = self.registers.e.wrapping_add(1),
-            Target::F => self.registers.f = self.registers.f.wrapping_add(1),
-            Target::G => self.registers.g = self.registers.g.wrapping_add(1),
-            Target::H => self.registers.h = self.registers.h.wrapping_add(1),
+            Target::A => v = &mut self.registers.a,
+            Target::B => v = &mut self.registers.b,
+            Target::C => v = &mut self.registers.c,
+            Target::D => v = &mut self.registers.d,
+            Target::E => v = &mut self.registers.e,
+            Target::F => v = &mut self.registers.f,
+            Target::G => v = &mut self.registers.g,
+            Target::H => v = &mut self.registers.h,
             Target::HL => todo!(),
             Target::HLP => todo!(),
             Target::HLM => todo!(),
             Target::BC => {
-                self.registers.b = self.registers.b.wrapping_add(1);
-                self.registers.c = self.registers.c.wrapping_add(1);
+                todo!();
             }
             Target::DE => {
-                self.registers.d = self.registers.d.wrapping_add(1);
-                self.registers.e = self.registers.e.wrapping_add(1);
+                todo!();
             }
             _ => {
                 panic!("Unimplemented")
             }
         }
+
+        unsafe {
+            self.registers.set_flag(Flag::HalfCarry, *v == 0b1111);
+            self.registers.set_flag(Flag::Carry, *v == 0b11111111);
+            self.registers.set_flag(Flag::Sub, false);
+
+            *v = (*v).wrapping_add(1);
+            self.registers.set_flag(Flag::Zero, *v == 0);
+        }
     }
 
     pub fn dec(&mut self, target: Target) {
+        let v: *mut u8;
         match target {
-            Target::A => self.registers.a = self.registers.a.wrapping_sub(1),
-            Target::B => self.registers.b = self.registers.b.wrapping_sub(1),
-            Target::C => self.registers.c = self.registers.c.wrapping_sub(1),
-            Target::D => self.registers.d = self.registers.d.wrapping_sub(1),
-            Target::E => self.registers.e = self.registers.e.wrapping_sub(1),
-            Target::F => self.registers.f = self.registers.f.wrapping_sub(1),
-            Target::G => self.registers.g = self.registers.g.wrapping_sub(1),
-            Target::H => self.registers.h = self.registers.h.wrapping_sub(1),
+            Target::A => v = &mut self.registers.a,
+            Target::B => v = &mut self.registers.b,
+            Target::C => v = &mut self.registers.c,
+            Target::D => v = &mut self.registers.d,
+            Target::E => v = &mut self.registers.e,
+            Target::F => v = &mut self.registers.f,
+            Target::G => v = &mut self.registers.g,
+            Target::H => v = &mut self.registers.h,
             Target::HL => todo!(),
             Target::HLP => todo!(),
             Target::HLM => todo!(),
             Target::BC => {
-                self.registers.b = self.registers.b.wrapping_sub(1);
-                self.registers.c = self.registers.c.wrapping_sub(1);
+                todo!();
             }
             Target::DE => {
-                self.registers.d = self.registers.d.wrapping_sub(1);
-                self.registers.e = self.registers.e.wrapping_sub(1);
+                todo!();
             }
             _ => {
                 panic!("Unimplemented")
             }
+        }
+
+        unsafe {
+            self.registers.set_flag(Flag::HalfCarry, false);
+            self.registers.set_flag(Flag::Carry, false);
+            self.registers.set_flag(Flag::Sub, true);
+
+            *v = (*v).wrapping_sub(1);
+            self.registers.set_flag(Flag::Zero, *v == 0);
         }
     }
 
@@ -349,6 +389,35 @@ impl Cpu {
         }
     }
 
+    pub fn swap(&mut self, reg: Target) {
+        let v: *mut u8;
+        match reg {
+            Target::A => v = &mut self.registers.a,
+            Target::B => v = &mut self.registers.b,
+            Target::C => v = &mut self.registers.c,
+            Target::D => v = &mut self.registers.d,
+            Target::E => v = &mut self.registers.e,
+            Target::F => v = &mut self.registers.f,
+            Target::G => v = &mut self.registers.g,
+            Target::H => v = &mut self.registers.h,
+            _ => {
+                panic!("Unimplemented")
+            }
+        }
+
+        unsafe {
+            let upper = *v & (0b1111 << 4);
+            let lower = *v & 0b1111;
+            *v = (upper >> 4) | (lower << 4);
+        }
+    }
+
+    pub fn jump(&mut self, flag: Flag, address: u16) {
+        if self.registers.get_flag(flag) {
+            self.pc = address;
+        }
+    }
+
     pub fn set_a(&mut self, value: u8) {
         self.registers.a = value;
     }
@@ -373,77 +442,111 @@ impl Cpu {
 }
 
 #[test]
-fn test_arithmetic() {
+fn test_add() {
     let mut cpu = Cpu::new();
 
+    cpu.registers.a = 0;
     cpu.registers.b = 5;
-
-    let mut i = Instruction::from_byte(0x80).unwrap();
-
-    cpu.execute(&i);
-
+    cpu.add(Target::B);
     assert!(cpu.registers.a == 5);
+    assert!(!cpu.registers.get_flag(Flag::Zero));
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
+    assert!(!cpu.registers.get_flag(Flag::Sub));
 
-    i = Instruction::from_byte(0x80).unwrap();
     cpu.registers.a = 255;
     cpu.registers.b = 1;
-
-    cpu.execute(&i);
+    cpu.add(Target::B);
 
     assert!(cpu.registers.a == 0);
+    assert!(cpu.registers.get_flag(Flag::Zero));
+    assert!(cpu.registers.get_flag(Flag::Carry));
+    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
+    assert!(!cpu.registers.get_flag(Flag::Sub));
+}
 
-    i = Instruction::from_byte(0x90).unwrap();
-    cpu.execute(&i);
+#[test]
+fn test_sub() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 10;
+    cpu.registers.b = 5;
+    cpu.sub(Target::B);
+
+    assert!(cpu.registers.a == 5);
+    assert!(!cpu.registers.get_flag(Flag::Zero));
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
+    assert!(cpu.registers.get_flag(Flag::Sub));
+
+    cpu.registers.a = 0;
+    cpu.registers.b = 1;
+    cpu.sub(Target::B);
 
     assert!(cpu.registers.a == 255);
+    assert!(cpu.registers.get_flag(Flag::Zero));
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
+    assert!(cpu.registers.get_flag(Flag::Sub));
 }
 
 #[test]
 fn test_increment() {
     let mut cpu = Cpu::new();
 
-    let mut i = Instruction::from_byte(0x3C).unwrap();
-
-    cpu.execute(&i);
+    cpu.registers.a = 0;
+    cpu.inc(Target::A);
 
     assert!(cpu.registers.a == 1);
-
-    i = Instruction::from_byte(0x3D).unwrap();
-    cpu.execute(&i);
-
-    assert!(cpu.registers.a == 0);
-
-    i = Instruction::from_byte(0x03D).unwrap();
-    cpu.execute(&i);
-
-    assert!(cpu.registers.a == 255);
+    assert!(!cpu.registers.get_flag(Flag::Zero));
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
+    assert!(!cpu.registers.get_flag(Flag::Sub));
 }
 
 #[test]
-fn test_bitwise() {
+fn test_decrement() {
     let mut cpu = Cpu::new();
 
-    let mut i = Instruction::from_byte(0xA0).unwrap();
-    cpu.registers.a = 5;
-    cpu.registers.b = 3;
+    cpu.registers.a = 1;
+    cpu.dec(Target::A);
 
-    cpu.execute(&i);
+    assert!(cpu.registers.a == 0);
+    assert!(cpu.registers.get_flag(Flag::Zero));
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
+    assert!(cpu.registers.get_flag(Flag::Sub));
+}
+
+#[test]
+fn test_and() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 3;
+    cpu.registers.b = 5;
+    cpu.and(Target::B);
 
     assert!(cpu.registers.a == 1);
+}
 
-    i = Instruction::from_byte(0xB0).unwrap();
-    cpu.registers.a = 5;
-    cpu.registers.b = 2;
+#[test]
+fn test_or() {
+    let mut cpu = Cpu::new();
 
-    cpu.execute(&i);
+    cpu.registers.a = 3;
+    cpu.registers.b = 5;
+    cpu.or(Target::B);
 
     assert!(cpu.registers.a == 7);
+}
 
-    i = Instruction::from_byte(0xA8).unwrap();
-    cpu.registers.a = 5;
-    cpu.registers.b = 3;
+#[test]
+fn test_xor() {
+    let mut cpu = Cpu::new();
 
-    cpu.execute(&i);
+    cpu.registers.a = 3;
+    cpu.registers.b = 5;
+    cpu.xor(Target::B);
 
     assert!(cpu.registers.a == 6);
 }
@@ -461,4 +564,25 @@ fn test_flags() {
 
     cpu.registers.set_flag(Flag::Carry, true);
     assert!(cpu.registers.get_flag(Flag::Carry));
+}
+
+#[test]
+fn test_swap() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 128 + 4;
+    cpu.swap(Target::A);
+    assert!(72 == cpu.registers.a);
+}
+
+#[test]
+fn test_jump() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 5;
+    cpu.registers.b = 5;
+    cpu.sub(Target::B);
+    cpu.jump(Flag::Zero, 255);
+
+    assert!(cpu.pc == 255);
 }
