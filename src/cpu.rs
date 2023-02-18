@@ -71,9 +71,11 @@ impl Cpu {
                     .load(target, self.memory.read_byte(self.pc + 1));
             }
             OpCode::LDR(target, src) => match src {
-                Target::D8 => self
-                    .registers
-                    .load(target, self.memory.read_byte(self.pc + 1)),
+                Target::D8 => {
+                    self.registers
+                        .load(target, self.memory.read_byte(self.pc + 1));
+                    pc_increment = 2;
+                }
                 _ => {
                     self.registers.load_from_register(target, src);
                 }
@@ -150,7 +152,7 @@ impl Cpu {
                 self.registers.set_bit(target, &bit, 1);
             }
             OpCode::SWAP(target) => {
-                self.registers.swap(target);
+                self.swap(target);
             }
             OpCode::JUMP(flag) => {
                 let value = self.memory.read_byte(self.pc + 1);
@@ -213,6 +215,9 @@ impl Cpu {
             Target::F => v = self.registers.f,
             Target::G => v = self.registers.g,
             Target::H => v = self.registers.h,
+            Target::D8 => {
+                v = self.memory.read_byte(self.pc + 1);
+            }
             _ => {
                 panic!("Invalid Target");
             }

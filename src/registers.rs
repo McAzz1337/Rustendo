@@ -307,54 +307,6 @@ impl Registers {
         }
     }
 
-    pub fn swap(&mut self, reg: Target) {
-        match reg {
-            Target::A => {
-                let lower = self.a & 0xF;
-                self.a = self.a >> 4;
-                self.a = self.a | (lower << 4);
-            }
-            Target::B => {
-                let lower = self.b & 0xF;
-                self.b = self.b >> 4;
-                self.b = self.b | (lower << 4);
-            }
-            Target::C => {
-                let lower = self.c & 0xF;
-                self.c = self.c >> 4;
-                self.c = self.c | (lower << 4);
-            }
-            Target::D => {
-                let lower = self.d & 0xF;
-                self.d = self.d >> 4;
-                self.d = self.d | (lower << 4);
-            }
-            Target::E => {
-                let lower = self.e & 0xF;
-                self.e = self.e >> 4;
-                self.e = self.e | (lower << 4);
-            }
-            Target::F => {
-                let lower = self.f & 0xF;
-                self.f = self.f >> 4;
-                self.f = self.f | (lower << 4);
-            }
-            Target::G => {
-                let lower = self.g & 0xF;
-                self.g = self.g >> 4;
-                self.g = self.g | (lower << 4);
-            }
-            Target::H => {
-                let lower = self.h & 0xF;
-                self.h = self.h >> 4;
-                self.h = self.h | (lower << 4);
-            }
-            _ => {
-                panic!("Unimplemented");
-            }
-        }
-    }
-
     pub fn load_from_register(&mut self, target: Target, src: Target) {
         let mut _dst: *mut u8 = ptr::null_mut();
         let mut _value: *const u8 = ptr::null_mut();
@@ -409,34 +361,6 @@ impl Registers {
         }
     }
 
-    #[allow(unused_assignments)]
-    pub fn add(&mut self, reg: Target) {
-        let mut op: *mut u8 = ptr::null_mut();
-        unsafe {
-            match reg {
-                Target::A => op = &mut self.a,
-                Target::B => op = &mut self.b,
-                Target::C => op = &mut self.c,
-                Target::D => op = &mut self.d,
-                Target::E => op = &mut self.e,
-                Target::F => op = &mut self.f,
-                Target::G => op = &mut self.g,
-                Target::H => op = &mut self.h,
-                _ => {
-                    panic!("Unimplemented")
-                }
-            }
-
-            if self.a as i32 + *op as i32 > 255 {
-                self.set_flag(Flag::Carry, true);
-            } else {
-                self.set_flag(Flag::Carry, false);
-            }
-
-            self.a = self.a.wrapping_add(*op);
-        }
-    }
-
     pub fn register_as_bit_string(&self, reg: Target) -> String {
         match reg {
             Target::A => return utils::as_bit_string(self.a),
@@ -468,21 +392,6 @@ impl Registers {
             }
         }
     }
-}
-
-#[test]
-fn test_add() {
-    let mut reg = Registers::new();
-
-    reg.a = 10;
-    reg.b = 5;
-
-    reg.add(Target::B);
-    assert!(reg.a == 15);
-
-    reg.a = 255;
-    reg.add(Target::B);
-    assert!(reg.get_flag(Flag::Carry));
 }
 
 #[test]
@@ -530,18 +439,6 @@ fn test_set_bit() {
 }
 
 #[test]
-fn test_swap() {
-    let mut reg = Registers::new();
-    reg.a = 1;
-    reg.swap(Target::A);
-    assert!(reg.a == 16);
-
-    reg.a = 128 + 4;
-    reg.swap(Target::A);
-    assert!(reg.a == 0b01001000);
-}
-
-#[test]
 fn test_convert_to_bit_string() {
     let mut reg = Registers::new();
 
@@ -551,7 +448,7 @@ fn test_convert_to_bit_string() {
 }
 
 #[test]
-fn tes_convert_to_hex_string() {
+fn test_convert_to_hex_string() {
     let mut reg = Registers::new();
 
     reg.a = 128;
@@ -561,21 +458,4 @@ fn tes_convert_to_hex_string() {
     reg.a = 128 + 15;
 
     assert!(reg.register_as_hex_string(Target::A).as_str().as_bytes() == "0x8F".as_bytes());
-}
-
-#[test]
-fn test_flag_setters() {
-    let mut r = Registers::new();
-
-    r.set_flag(Flag::Zero, true);
-    assert!(r.get_flag(Flag::Zero));
-
-    r.set_flag(Flag::Carry, true);
-    assert!(r.get_flag(Flag::Carry));
-
-    r.set_flag(Flag::HalfCarry, true);
-    assert!(r.get_flag(Flag::HalfCarry));
-
-    r.set_flag(Flag::Sub, true);
-    assert!(r.get_flag(Flag::Sub));
 }

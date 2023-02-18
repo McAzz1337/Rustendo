@@ -117,7 +117,6 @@ lazy_static! {
 
         m.insert(0x00 as  u8, Instruction::new(OpCode::NOP, 1, 4, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED ,NOT_AFFECTED]));
 
-
         // LD 8bit
         m.insert(0x02 as  u8, Instruction::new(OpCode::LDR(Target::BC, Target::A), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED ,NOT_AFFECTED]));
         m.insert(0x06 as  u8, Instruction::new(OpCode::LDR(Target::B, Target::D8), 2, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED ,NOT_AFFECTED]));
@@ -378,6 +377,15 @@ impl Instruction {
         }
 
         panic!("Invalid OpCode");
+    }
+
+    pub fn byte_from_opcode(opcode: OpCode) -> Option<u8> {
+        for (code, instruction) in &*INSTRUCTIONS {
+            if opcode == instruction.opcode {
+                return Some(code.to_owned());
+            }
+        }
+        None
     }
 
     pub fn print_instruction_bytes_as_i8() {
