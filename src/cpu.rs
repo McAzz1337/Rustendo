@@ -66,20 +66,14 @@ impl Cpu {
         let mut pc_increment = instruction.length as u16;
 
         match instruction.opcode.to_owned() {
-            OpCode::LD(target) => {
-                self.registers
-                    .load(target, self.memory.read_byte(self.pc + 1));
-            }
-            OpCode::LDR(target, src) => match src {
-                Target::D8 => {
-                    self.registers
-                        .load(target, self.memory.read_byte(self.pc + 1));
+            OpCode::LD(dst, src) => {
+                self.load(dst, src);
+                if src == Target::D8 {
                     pc_increment = 2;
+                } else {
+                    pc_increment = 1;
                 }
-                _ => {
-                    self.registers.load_from_register(target, src);
-                }
-            },
+            }
             OpCode::ADD(target) => {
                 self.add(target);
             }
@@ -138,58 +132,20 @@ impl Cpu {
             OpCode::SLA(target) => {
                 self.registers.shift_left(target);
             }
-            OpCode::CPL => {
-                todo!();
-            }
-            OpCode::BIT(target, bit) => {
-                let _b = self.registers.get_bit(target, &bit);
-                todo!();
-            }
-            OpCode::RESET(target, bit) => {
-                self.registers.set_bit(target, &bit, 0);
-            }
-            OpCode::SET(target, bit) => {
-                self.registers.set_bit(target, &bit, 1);
+            OpCode::CPL(target) => {
+                self.cpl(target);
             }
             OpCode::SWAP(target) => {
                 self.swap(target);
             }
             OpCode::JUMP(flag) => {
                 let value = self.memory.read_byte(self.pc + 1);
-                match flag {
-                    Flag::Zero => {
-                        if self.registers.get_flag(Flag::Zero) {
-                            pc_increment = self.pc.wrapping_add(value as u16);
-                        }
-                    }
-                    Flag::Carry => {
-                        if self.registers.get_flag(Flag::Carry) {
-                            pc_increment = self.pc.wrapping_add(value as u16);
-                        }
-                    }
-                    Flag::NotCarry => {
-                        if !self.registers.get_flag(Flag::Carry) {
-                            pc_increment = self.pc.wrapping_add(value as u16);
-                        }
-                    }
-                    Flag::NotZero => {
-                        if !self.registers.get_flag(Flag::Carry) {
-                            pc_increment = self.pc.wrapping_add(value as u16);
-                        }
-                    }
-                    Flag::HalfCarry => {
-                        if !self.registers.get_flag(Flag::Carry) {
-                            pc_increment = self.pc.wrapping_add(value as u16);
-                        }
-                    }
-                    Flag::NotHalfCarry => {
-                        if !self.registers.get_flag(Flag::Carry) {
-                            pc_increment = self.pc.wrapping_add(value as u16);
-                        }
-                    }
-
-                    _ => {}
-                };
+                if self.jump_by_flag(flag, value as u16) {
+                    pc_increment = 0;
+                }
+            }
+            OpCode::JUMP_UNCONDICIONAL => {
+                self.jump(self.addr);
             }
             OpCode::CALL(flag) => match flag {
                 Flag::Zero => if self.registers.get_flag(flag) {},
@@ -201,6 +157,44 @@ impl Cpu {
         }
 
         self.pc.wrapping_add(pc_increment)
+    }
+
+    #[allow(unused_assignments)]
+    pub fn load(&mut self, dst: Target, src: Target) {
+        let mut d: *mut u8 = ptr::null_mut();
+        let mut v: *mut u8 = ptr::null_mut();
+
+        match dst {
+            Target::A => d = &mut self.registers.a,
+            Target::B => d = &mut self.registers.b,
+            Target::C => d = &mut self.registers.c,
+            Target::D => d = &mut self.registers.d,
+            Target::E => d = &mut self.registers.e,
+            Target::F => d = &mut self.registers.f,
+            Target::G => d = &mut self.registers.g,
+            Target::H => d = &mut self.registers.h,
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+        match src {
+            Target::A => v = &mut self.registers.a,
+            Target::B => v = &mut self.registers.b,
+            Target::C => v = &mut self.registers.c,
+            Target::D => v = &mut self.registers.d,
+            Target::E => v = &mut self.registers.e,
+            Target::F => v = &mut self.registers.f,
+            Target::G => v = &mut self.registers.g,
+            Target::H => v = &mut self.registers.h,
+            Target::D8 => v = &mut self.memory.read_byte(self.pc + 1),
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+
+        unsafe {
+            *d = *v;
+        }
     }
 
     pub fn add(&mut self, src: Target) {
@@ -248,6 +242,22 @@ impl Cpu {
             Target::H => self.registers.hl = self.registers.hl.wrapping_add(self.registers.h),
             _ => {
                 panic!("Unimplemented")
+            }
+        }
+    }
+
+    pub fn cpl(&mut self, reg: Target) {
+        match reg {
+            Target::A => self.registers.a = !self.registers.a,
+            Target::B => self.registers.b = !self.registers.b,
+            Target::C => self.registers.c = !self.registers.c,
+            Target::D => self.registers.d = !self.registers.d,
+            Target::E => self.registers.e = !self.registers.e,
+            Target::F => self.registers.f = !self.registers.f,
+            Target::G => self.registers.g = !self.registers.g,
+            Target::H => self.registers.h = !self.registers.h,
+            _ => {
+                panic!("Unimplemented");
             }
         }
     }
@@ -417,10 +427,16 @@ impl Cpu {
         }
     }
 
-    pub fn jump(&mut self, flag: Flag, address: u16) {
+    pub fn jump_by_flag(&mut self, flag: Flag, address: u16) -> bool {
         if self.registers.get_flag(flag) {
             self.pc = address;
+            return true;
         }
+        false
+    }
+
+    pub fn jump(&mut self, address: u16) {
+        self.pc = address;
     }
 
     pub fn set_a(&mut self, value: u8) {
@@ -443,6 +459,10 @@ impl Cpu {
             self.registers.g,
             self.registers.h
         );
+    }
+
+    pub fn get_pc(&self) -> u16 {
+        self.pc
     }
 }
 
@@ -587,7 +607,29 @@ fn test_jump() {
     cpu.registers.a = 5;
     cpu.registers.b = 5;
     cpu.sub(Target::B);
-    cpu.jump(Flag::Zero, 255);
+    cpu.jump_by_flag(Flag::Zero, 255);
 
     assert!(cpu.pc == 255);
+}
+
+#[test]
+fn test_load() {
+    let mut cpu = Cpu::new();
+    cpu.write_to_memory(
+        0,
+        Instruction::byte_from_opcode(OpCode::LD(Target::A, Target::D8)).unwrap(),
+    );
+    cpu.write_to_memory(1, 100);
+    cpu.tick();
+    cpu.tick();
+    assert!(cpu.registers.a == 100);
+}
+
+#[test]
+fn test_cpl() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 1;
+    cpu.cpl(Target::A);
+    assert!(cpu.registers.a == 0b11111110);
 }

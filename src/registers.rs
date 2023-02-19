@@ -307,60 +307,6 @@ impl Registers {
         }
     }
 
-    pub fn load_from_register(&mut self, target: Target, src: Target) {
-        let mut _dst: *mut u8 = ptr::null_mut();
-        let mut _value: *const u8 = ptr::null_mut();
-
-        match target {
-            Target::A => _dst = &mut self.a,
-            Target::B => _dst = &mut self.b,
-            Target::C => _dst = &mut self.c,
-            Target::D => _dst = &mut self.d,
-            Target::E => _dst = &mut self.e,
-            Target::F => _dst = &mut self.f,
-            Target::G => _dst = &mut self.g,
-            Target::H => _dst = &mut self.h,
-            _ => {
-                panic!("Unimplemented");
-            }
-        }
-
-        match src {
-            Target::A => _value = &mut self.a,
-            Target::B => _value = &mut self.b,
-            Target::C => _value = &mut self.c,
-            Target::D => _value = &mut self.d,
-            Target::E => _value = &mut self.e,
-            Target::F => _value = &mut self.f,
-            Target::G => _value = &mut self.g,
-            Target::H => _value = &mut self.h,
-            _ => {
-                panic!("Unimplemented");
-            }
-        }
-        unsafe {
-            self.set_flag(Flag::Carry, *_dst as i32 + *_value as i32 > 255);
-
-            *_dst = *_value;
-        }
-    }
-
-    pub fn load(&mut self, reg: Target, v: u8) {
-        match reg {
-            Target::A => self.a = v,
-            Target::B => self.b = v,
-            Target::C => self.c = v,
-            Target::D => self.d = v,
-            Target::E => self.e = v,
-            Target::F => self.f = v,
-            Target::G => self.g = v,
-            Target::H => self.g = v,
-            _ => {
-                panic!("Unimplemented")
-            }
-        }
-    }
-
     pub fn register_as_bit_string(&self, reg: Target) -> String {
         match reg {
             Target::A => return utils::as_bit_string(self.a),
