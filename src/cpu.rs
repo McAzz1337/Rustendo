@@ -77,6 +77,9 @@ impl Cpu {
             OpCode::ADD(target) => {
                 self.add(target);
             }
+            OpCode::ADD_16(dst, src) => {
+                self.add_16(dst, src);
+            }
             OpCode::ADDHL(target) => {
                 self.add_hl(target);
             }
@@ -151,6 +154,9 @@ impl Cpu {
                 Flag::Zero => if self.registers.get_flag(flag) {},
                 _ => {}
             },
+            OpCode::PREFIX => {
+                // Figure out if something needs to be done here
+            }
             _ => {
                 panic!("Unimplemented");
             }
@@ -173,6 +179,14 @@ impl Cpu {
             Target::F => d = &mut self.registers.f,
             Target::G => d = &mut self.registers.g,
             Target::H => d = &mut self.registers.h,
+            Target::A8 => {
+                self.load_16(dst, src);
+                return;
+            }
+            Target::A16 => {
+                self.load_16(dst, src);
+                return;
+            }
             _ => {
                 panic!("Unimplemented");
             }
@@ -187,6 +201,14 @@ impl Cpu {
             Target::G => v = &mut self.registers.g,
             Target::H => v = &mut self.registers.h,
             Target::D8 => v = &mut self.memory.read_byte(self.pc + 1),
+            Target::A8 => {
+                self.load_16(dst, src);
+                return;
+            }
+            Target::A16 => {
+                self.load_16(dst, src);
+                return;
+            }
             _ => {
                 panic!("Unimplemented");
             }
@@ -194,6 +216,27 @@ impl Cpu {
 
         unsafe {
             *d = *v;
+        }
+    }
+
+    pub fn load_16(&mut self, dst: Target, src: Target) {
+        match dst {
+            Target::A8 => match src {
+                Target::A => self.addr = self.registers.a as u16,
+                _ => {
+                    panic!("Unimplemented")
+                }
+            },
+            Target::A => match src {
+                Target::A8 => self.registers.a = (self.addr & 0b1111) as u8,
+                Target::A16 => self.registers.a = ((self.addr & 0b11110000) >> 4) as u8,
+                _ => {
+                    panic!("Unimplemented");
+                }
+            },
+            _ => {
+                panic!("Unimplemented");
+            }
         }
     }
 
@@ -228,6 +271,48 @@ impl Cpu {
         self.registers.a = self.registers.a.wrapping_add(v);
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
         self.registers.set_flag(Flag::Sub, false);
+    }
+
+    pub fn add_16(&mut self, dst: Target, src: Target) {
+        let mut v: u16 = 0;
+        match src {
+            Target::HL => {
+                v = (self.registers.h as u16) << 4;
+                v = v | self.registers.g as u16;
+            }
+            Target::BC => {
+                v = (self.registers.b as u16) << 4;
+                v = v | self.registers.c as u16;
+            }
+            Target::DE => {
+                v = (self.registers.d as u16) << 4;
+                v = v | self.registers.e as u16;
+            }
+            Target::SP => {
+                v = self.sp;
+            }
+            Target::R8 => {
+                v = self.memory.read_byte(self.pc + 1) as u16;
+            }
+            _ => {
+                panic!("Unimplemented")
+            }
+        }
+
+        match dst {
+            Target::HL => {
+                let upper = (v & (0b1111 << 4)) >> 4;
+                let lower = v & 0b1111;
+                self.registers.h = upper as u8;
+                self.registers.g = lower as u8;
+            }
+            Target::SP => {
+                self.sp = v;
+            }
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
     }
 
     pub fn add_hl(&mut self, src: Target) {

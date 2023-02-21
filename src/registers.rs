@@ -1,16 +1,15 @@
 use crate::instruction::Target;
 use crate::utils;
-use std::ptr;
 
 pub struct Registers {
     pub a: u8,
+    pub f: u8,
     pub b: u8,
     pub c: u8,
     pub d: u8,
     pub e: u8,
-    pub f: u8,
-    pub g: u8,
     pub h: u8,
+    pub l: u8,
     pub hl: u8,
 }
 
@@ -34,7 +33,7 @@ impl Registers {
             d: 0,
             e: 0,
             f: 0,
-            g: 0,
+            l: 0,
             h: 0,
             hl: 0,
         }
@@ -128,9 +127,9 @@ impl Registers {
                 self.f = self.f | x;
             }
             Target::G => {
-                let x = (self.g & 1) << 7;
-                self.g = self.g >> 1;
-                self.g = self.g | x;
+                let x = (self.l & 1) << 7;
+                self.l = self.l >> 1;
+                self.l = self.l | x;
             }
             Target::H => {
                 let x = (self.h & 1) << 7;
@@ -176,9 +175,9 @@ impl Registers {
                 self.f = self.f | x;
             }
             Target::G => {
-                let x = (self.g & 0b10000000) >> 7;
-                self.g = self.g << 1;
-                self.g = self.g | x;
+                let x = (self.l & 0b10000000) >> 7;
+                self.l = self.l << 1;
+                self.l = self.l | x;
             }
             Target::H => {
                 let x = (self.h & 0b10000000) >> 7;
@@ -212,7 +211,7 @@ impl Registers {
                 self.f = self.f >> 1;
             }
             Target::G => {
-                self.g = self.g >> 1;
+                self.l = self.l >> 1;
             }
             Target::H => {
                 self.h = self.h >> 1;
@@ -244,7 +243,7 @@ impl Registers {
                 self.f = self.f << 1;
             }
             Target::G => {
-                self.g = self.g << 1;
+                self.l = self.l << 1;
             }
             Target::H => {
                 self.h = self.h << 1;
@@ -264,7 +263,7 @@ impl Registers {
             Target::D => return (self.d & mask) >= 1,
             Target::E => return (self.e & mask) >= 1,
             Target::F => return (self.f & mask) >= 1,
-            Target::G => return (self.g & mask) >= 1,
+            Target::G => return (self.l & mask) >= 1,
             Target::H => return (self.h & mask) >= 1,
             _ => {
                 panic!("Unimplemented");
@@ -282,7 +281,7 @@ impl Registers {
                 Target::D => self.d = self.d | mask,
                 Target::E => self.e = self.e | mask,
                 Target::F => self.f = self.f | mask,
-                Target::G => self.g = self.g | mask,
+                Target::G => self.l = self.l | mask,
                 Target::H => self.h = self.h | mask,
                 _ => {
                     panic!("Unimplemented");
@@ -298,7 +297,7 @@ impl Registers {
                 Target::D => self.d = self.d & mask,
                 Target::E => self.e = self.e & mask,
                 Target::F => self.f = self.f & mask,
-                Target::G => self.g = self.g & mask,
+                Target::G => self.l = self.l & mask,
                 Target::H => self.h = self.h & mask,
                 _ => {
                     panic!("Unimplemented");
@@ -315,7 +314,7 @@ impl Registers {
             Target::D => return utils::as_bit_string(self.d),
             Target::E => return utils::as_bit_string(self.e),
             Target::F => return utils::as_bit_string(self.f),
-            Target::G => return utils::as_bit_string(self.g),
+            Target::G => return utils::as_bit_string(self.l),
             Target::H => return utils::as_bit_string(self.h),
             _ => {
                 panic!("Unimplemented");
@@ -331,7 +330,7 @@ impl Registers {
             Target::D => return utils::as_hex_string(self.d),
             Target::E => return utils::as_hex_string(self.e),
             Target::F => return utils::as_hex_string(self.f),
-            Target::G => return utils::as_hex_string(self.g),
+            Target::G => return utils::as_hex_string(self.l),
             Target::H => return utils::as_hex_string(self.h),
             _ => {
                 panic!("Unimplemented");
