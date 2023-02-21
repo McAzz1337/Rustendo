@@ -1,6 +1,9 @@
 use crate::instruction::Target;
 use crate::utils;
 
+use lmg_offset::Offset;
+
+#[derive(Offset)]
 pub struct Registers {
     pub a: u8,
     pub f: u8,
@@ -126,7 +129,7 @@ impl Registers {
                 self.f = self.f >> 1;
                 self.f = self.f | x;
             }
-            Target::G => {
+            Target::L => {
                 let x = (self.l & 1) << 7;
                 self.l = self.l >> 1;
                 self.l = self.l | x;
@@ -174,7 +177,7 @@ impl Registers {
                 self.f = self.f << 1;
                 self.f = self.f | x;
             }
-            Target::G => {
+            Target::L => {
                 let x = (self.l & 0b10000000) >> 7;
                 self.l = self.l << 1;
                 self.l = self.l | x;
@@ -210,7 +213,7 @@ impl Registers {
             Target::F => {
                 self.f = self.f >> 1;
             }
-            Target::G => {
+            Target::L => {
                 self.l = self.l >> 1;
             }
             Target::H => {
@@ -242,7 +245,7 @@ impl Registers {
             Target::F => {
                 self.f = self.f << 1;
             }
-            Target::G => {
+            Target::L => {
                 self.l = self.l << 1;
             }
             Target::H => {
@@ -263,7 +266,7 @@ impl Registers {
             Target::D => return (self.d & mask) >= 1,
             Target::E => return (self.e & mask) >= 1,
             Target::F => return (self.f & mask) >= 1,
-            Target::G => return (self.l & mask) >= 1,
+            Target::L => return (self.l & mask) >= 1,
             Target::H => return (self.h & mask) >= 1,
             _ => {
                 panic!("Unimplemented");
@@ -281,7 +284,7 @@ impl Registers {
                 Target::D => self.d = self.d | mask,
                 Target::E => self.e = self.e | mask,
                 Target::F => self.f = self.f | mask,
-                Target::G => self.l = self.l | mask,
+                Target::L => self.l = self.l | mask,
                 Target::H => self.h = self.h | mask,
                 _ => {
                     panic!("Unimplemented");
@@ -297,7 +300,7 @@ impl Registers {
                 Target::D => self.d = self.d & mask,
                 Target::E => self.e = self.e & mask,
                 Target::F => self.f = self.f & mask,
-                Target::G => self.l = self.l & mask,
+                Target::L => self.l = self.l & mask,
                 Target::H => self.h = self.h & mask,
                 _ => {
                     panic!("Unimplemented");
@@ -314,7 +317,7 @@ impl Registers {
             Target::D => return utils::as_bit_string(self.d),
             Target::E => return utils::as_bit_string(self.e),
             Target::F => return utils::as_bit_string(self.f),
-            Target::G => return utils::as_bit_string(self.l),
+            Target::L => return utils::as_bit_string(self.l),
             Target::H => return utils::as_bit_string(self.h),
             _ => {
                 panic!("Unimplemented");
@@ -330,7 +333,7 @@ impl Registers {
             Target::D => return utils::as_hex_string(self.d),
             Target::E => return utils::as_hex_string(self.e),
             Target::F => return utils::as_hex_string(self.f),
-            Target::G => return utils::as_hex_string(self.l),
+            Target::L => return utils::as_hex_string(self.l),
             Target::H => return utils::as_hex_string(self.h),
             _ => {
                 panic!("Unimplemented");

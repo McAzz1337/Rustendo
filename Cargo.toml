@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 get_set = { path = "../libs/get_set" }
 builder  = { path = "../libs/builder" }
+lmg_offset = { path = "../libs/lmg_offset" }
 lazy_static = "1.4.0"

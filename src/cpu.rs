@@ -177,7 +177,7 @@ impl Cpu {
             Target::D => d = &mut self.registers.d,
             Target::E => d = &mut self.registers.e,
             Target::F => d = &mut self.registers.f,
-            Target::G => d = &mut self.registers.g,
+            Target::L => d = &mut self.registers.l,
             Target::H => d = &mut self.registers.h,
             Target::A8 => {
                 self.load_16(dst, src);
@@ -198,7 +198,7 @@ impl Cpu {
             Target::D => v = &mut self.registers.d,
             Target::E => v = &mut self.registers.e,
             Target::F => v = &mut self.registers.f,
-            Target::G => v = &mut self.registers.g,
+            Target::L => v = &mut self.registers.l,
             Target::H => v = &mut self.registers.h,
             Target::D8 => v = &mut self.memory.read_byte(self.pc + 1),
             Target::A8 => {
@@ -250,7 +250,7 @@ impl Cpu {
             Target::D => v = self.registers.d,
             Target::E => v = self.registers.e,
             Target::F => v = self.registers.f,
-            Target::G => v = self.registers.g,
+            Target::L => v = self.registers.l,
             Target::H => v = self.registers.h,
             Target::D8 => {
                 v = self.memory.read_byte(self.pc + 1);
@@ -278,7 +278,7 @@ impl Cpu {
         match src {
             Target::HL => {
                 v = (self.registers.h as u16) << 4;
-                v = v | self.registers.g as u16;
+                v = v | self.registers.l as u16;
             }
             Target::BC => {
                 v = (self.registers.b as u16) << 4;
@@ -304,7 +304,7 @@ impl Cpu {
                 let upper = (v & (0b1111 << 4)) >> 4;
                 let lower = v & 0b1111;
                 self.registers.h = upper as u8;
-                self.registers.g = lower as u8;
+                self.registers.l = lower as u8;
             }
             Target::SP => {
                 self.sp = v;
@@ -323,7 +323,7 @@ impl Cpu {
             Target::D => self.registers.hl = self.registers.hl.wrapping_add(self.registers.d),
             Target::E => self.registers.hl = self.registers.hl.wrapping_add(self.registers.e),
             Target::F => self.registers.hl = self.registers.hl.wrapping_add(self.registers.f),
-            Target::G => self.registers.hl = self.registers.hl.wrapping_add(self.registers.g),
+            Target::L => self.registers.hl = self.registers.hl.wrapping_add(self.registers.l),
             Target::H => self.registers.hl = self.registers.hl.wrapping_add(self.registers.h),
             _ => {
                 panic!("Unimplemented")
@@ -339,7 +339,7 @@ impl Cpu {
             Target::D => self.registers.d = !self.registers.d,
             Target::E => self.registers.e = !self.registers.e,
             Target::F => self.registers.f = !self.registers.f,
-            Target::G => self.registers.g = !self.registers.g,
+            Target::L => self.registers.l = !self.registers.l,
             Target::H => self.registers.h = !self.registers.h,
             _ => {
                 panic!("Unimplemented");
@@ -356,7 +356,7 @@ impl Cpu {
             Target::D => v = self.registers.d,
             Target::E => v = self.registers.e,
             Target::F => v = self.registers.f,
-            Target::G => v = self.registers.g,
+            Target::L => v = self.registers.l,
             Target::H => v = self.registers.h,
             _ => {
                 panic!("Invalid Target");
@@ -380,7 +380,7 @@ impl Cpu {
             Target::D => v = &mut self.registers.d,
             Target::E => v = &mut self.registers.e,
             Target::F => v = &mut self.registers.f,
-            Target::G => v = &mut self.registers.g,
+            Target::L => v = &mut self.registers.l,
             Target::H => v = &mut self.registers.h,
             Target::HL => todo!(),
             Target::HLP => todo!(),
@@ -415,7 +415,7 @@ impl Cpu {
             Target::D => v = &mut self.registers.d,
             Target::E => v = &mut self.registers.e,
             Target::F => v = &mut self.registers.f,
-            Target::G => v = &mut self.registers.g,
+            Target::L => v = &mut self.registers.l,
             Target::H => v = &mut self.registers.h,
             Target::HL => todo!(),
             Target::HLP => todo!(),
@@ -449,7 +449,7 @@ impl Cpu {
             Target::D => self.registers.a = self.registers.a & self.registers.d,
             Target::E => self.registers.a = self.registers.a & self.registers.e,
             Target::F => self.registers.a = self.registers.a & self.registers.f,
-            Target::G => self.registers.a = self.registers.a & self.registers.g,
+            Target::L => self.registers.a = self.registers.a & self.registers.l,
             Target::H => self.registers.a = self.registers.a & self.registers.h,
             _ => {
                 panic!("Unimplemented");
@@ -465,7 +465,7 @@ impl Cpu {
             Target::D => self.registers.a = self.registers.a | self.registers.d,
             Target::E => self.registers.a = self.registers.a | self.registers.e,
             Target::F => self.registers.a = self.registers.a | self.registers.f,
-            Target::G => self.registers.a = self.registers.a | self.registers.g,
+            Target::L => self.registers.a = self.registers.a | self.registers.l,
             Target::H => self.registers.a = self.registers.a | self.registers.h,
             _ => {
                 panic!("Unimplemented");
@@ -481,7 +481,7 @@ impl Cpu {
             Target::D => self.registers.a = self.registers.a ^ self.registers.d,
             Target::E => self.registers.a = self.registers.a ^ self.registers.e,
             Target::F => self.registers.a = self.registers.a ^ self.registers.f,
-            Target::G => self.registers.a = self.registers.a ^ self.registers.g,
+            Target::L => self.registers.a = self.registers.a ^ self.registers.l,
             Target::H => self.registers.a = self.registers.a ^ self.registers.h,
             _ => {
                 panic!("Unimplemented");
@@ -498,7 +498,7 @@ impl Cpu {
             Target::D => v = &mut self.registers.d,
             Target::E => v = &mut self.registers.e,
             Target::F => v = &mut self.registers.f,
-            Target::G => v = &mut self.registers.g,
+            Target::L => v = &mut self.registers.l,
             Target::H => v = &mut self.registers.h,
             _ => {
                 panic!("Unimplemented")
@@ -541,7 +541,7 @@ impl Cpu {
             self.registers.d,
             self.registers.e,
             self.registers.f,
-            self.registers.g,
+            self.registers.l,
             self.registers.h
         );
     }
