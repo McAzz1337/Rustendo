@@ -396,21 +396,353 @@ lazy_static! {
 
         m
     };
-    static ref COUNT: usize = INSTRUCTIONS.len();
+    static ref INSTRUCTION_COUNT: usize = INSTRUCTIONS.len();
+}
+
+lazy_static! {
+    static ref PREFIXED_INSTRUCTIONS: HashMap<u8, Instruction> = {
+        let mut m = HashMap::new();
+
+
+        // RLC
+        m.insert(
+            0x00 as u8,
+            Instruction::new(
+                OpCode::RLC(Target::B),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x01 as u8,
+            Instruction::new(
+                OpCode::RLC(Target::C),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x02 as u8,
+            Instruction::new(
+                OpCode::RLC(Target::D),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x03 as u8,
+            Instruction::new(
+                OpCode::RLC(Target::E),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x04 as u8,
+            Instruction::new(
+                OpCode::RLC(Target::H),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x05 as u8,
+            Instruction::new(
+                OpCode::RLC(Target::L),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x06 as u8,
+            Instruction::new(
+                OpCode::RLC(Target::HL),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x07 as u8,
+            Instruction::new(
+                OpCode::RLC(Target::A),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+
+        //RRC
+        m.insert(
+            0x08 as u8,
+            Instruction::new(
+                OpCode::RRC(Target::B),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x09 as u8,
+            Instruction::new(
+                OpCode::RRC(Target::C),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x0A as u8,
+            Instruction::new(
+                OpCode::RRC(Target::D),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x0B as u8,
+            Instruction::new(
+                OpCode::RRC(Target::E),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x0C as u8,
+            Instruction::new(
+                OpCode::RRC(Target::H),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x0D as u8,
+            Instruction::new(
+                OpCode::RRC(Target::L),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x0E as u8,
+            Instruction::new(
+                OpCode::RRC(Target::HL),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x0F as u8,
+            Instruction::new(
+                OpCode::RRC(Target::A),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+
+
+        // RL
+        m.insert(
+            0x10 as u8,
+            Instruction::new(
+                OpCode::RL(Target::B),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x11 as u8,
+            Instruction::new(
+                OpCode::RL(Target::C),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x12 as u8,
+            Instruction::new(
+                OpCode::RL(Target::D),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x13 as u8,
+            Instruction::new(
+                OpCode::RL(Target::E),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x14 as u8,
+            Instruction::new(
+                OpCode::RL(Target::H),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x15 as u8,
+            Instruction::new(
+                OpCode::RL(Target::L),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x16 as u8,
+            Instruction::new(
+                OpCode::RL(Target::HL),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x17 as u8,
+            Instruction::new(
+                OpCode::RL(Target::A),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+
+
+        //RR
+        m.insert(
+            0x18 as u8,
+            Instruction::new(
+                OpCode::RR(Target::B),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x19 as u8,
+            Instruction::new(
+                OpCode::RR(Target::C),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x1A as u8,
+            Instruction::new(
+                OpCode::RR(Target::D),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x1B as u8,
+            Instruction::new(
+                OpCode::RR(Target::E),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x1C as u8,
+            Instruction::new(
+                OpCode::RR(Target::H),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x1D as u8,
+            Instruction::new(
+                OpCode::RR(Target::L),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x1E as u8,
+            Instruction::new(
+                OpCode::RR(Target::HL),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+        m.insert(
+            0x1F as u8,
+            Instruction::new(
+                OpCode::RR(Target::A),
+                2,
+                8,
+                0,
+                vec![AFFECTED, 0, 0, AFFECTED],
+            ),
+        );
+
+
+
+
+        m
+    };
+    static ref PREFIXED_INSTRUCTION_COUNT: usize = PREFIXED_INSTRUCTIONS.len();
 }
 
 impl Instruction {
-    pub fn add_instruction(trgt: Target) -> OpCode {
-        OpCode::ADD(trgt)
-    }
-
-    pub fn sub_instruction(trgt: Target) -> OpCode {
-        OpCode::SUB(trgt)
-    }
-    pub fn inc_instruction(trgt: Target) -> OpCode {
-        OpCode::INC(trgt)
-    }
-
     pub fn from_byte(byte: u8) -> Option<&'static Instruction> {
         let i = INSTRUCTIONS.get(&byte);
         if let Some(instruction) = i {
