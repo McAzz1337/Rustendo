@@ -48,7 +48,7 @@ impl Cpu {
     pub fn tick(&mut self) -> bool {
         let instruction_byte = self.memory.read_byte(self.pc);
 
-        if instruction_byte == Instruction::instruction_byte_from_opcode(OpCode::EndOfProgram) {
+        if instruction_byte == Instruction::byte_from_opcode(OpCode::EndOfProgram).unwrap() {
             return false;
         }
 
@@ -82,7 +82,7 @@ impl Cpu {
             OpCode::ADD(target) => {
                 self.add(target);
             }
-            OpCode::ADD_16(dst, src) => {
+            OpCode::Add16(dst, src) => {
                 self.add_16(dst, src);
             }
             OpCode::ADDHL(target) => {
@@ -152,7 +152,7 @@ impl Cpu {
                     pc_increment = 0;
                 }
             }
-            OpCode::JUMP_UNCONDICIONAL => {
+            OpCode::JumpUnconditional => {
                 self.jump(self.addr);
             }
             OpCode::CALL(flag) => match flag {
@@ -245,7 +245,7 @@ impl Cpu {
         }
     }
 
-    pub fn add(&mut self, src: Target) {
+    fn add(&mut self, src: Target) {
         let v;
 
         match src {
@@ -278,7 +278,8 @@ impl Cpu {
         self.registers.set_flag(Flag::Sub, false);
     }
 
-    pub fn add_16(&mut self, dst: Target, src: Target) {
+    #[allow(unused_assignments)]
+    fn add_16(&mut self, dst: Target, src: Target) {
         let mut v: u16 = 0;
         match src {
             Target::HL => {
@@ -320,7 +321,7 @@ impl Cpu {
         }
     }
 
-    pub fn add_hl(&mut self, src: Target) {
+    fn add_hl(&mut self, src: Target) {
         match src {
             Target::A => self.registers.hl = self.registers.hl.wrapping_add(self.registers.a),
             Target::B => self.registers.hl = self.registers.hl.wrapping_add(self.registers.b),
@@ -336,7 +337,7 @@ impl Cpu {
         }
     }
 
-    pub fn cpl(&mut self, reg: Target) {
+    fn cpl(&mut self, reg: Target) {
         match reg {
             Target::A => self.registers.a = !self.registers.a,
             Target::B => self.registers.b = !self.registers.b,
@@ -352,7 +353,7 @@ impl Cpu {
         }
     }
 
-    pub fn sub(&mut self, src: Target) {
+    fn sub(&mut self, src: Target) {
         let v;
         match src {
             Target::A => v = self.registers.a,
@@ -376,7 +377,7 @@ impl Cpu {
         self.registers.set_flag(Flag::Carry, false);
     }
 
-    pub fn inc(&mut self, target: Target) {
+    fn inc(&mut self, target: Target) {
         let v: *mut u8;
         match target {
             Target::A => v = &mut self.registers.a,
@@ -411,7 +412,7 @@ impl Cpu {
         }
     }
 
-    pub fn dec(&mut self, target: Target) {
+    fn dec(&mut self, target: Target) {
         let v: *mut u8;
         match target {
             Target::A => v = &mut self.registers.a,
@@ -446,7 +447,7 @@ impl Cpu {
         }
     }
 
-    pub fn and(&mut self, src: Target) {
+    fn and(&mut self, src: Target) {
         match src {
             Target::A => self.registers.a = self.registers.a & self.registers.a,
             Target::B => self.registers.a = self.registers.a & self.registers.b,
@@ -462,7 +463,7 @@ impl Cpu {
         }
     }
 
-    pub fn or(&mut self, src: Target) {
+    fn or(&mut self, src: Target) {
         match src {
             Target::A => self.registers.a = self.registers.a | self.registers.a,
             Target::B => self.registers.a = self.registers.a | self.registers.b,
@@ -478,7 +479,7 @@ impl Cpu {
         }
     }
 
-    pub fn xor(&mut self, src: Target) {
+    fn xor(&mut self, src: Target) {
         match src {
             Target::A => self.registers.a = self.registers.a ^ self.registers.a,
             Target::B => self.registers.a = self.registers.a ^ self.registers.b,
@@ -494,7 +495,7 @@ impl Cpu {
         }
     }
 
-    pub fn swap(&mut self, reg: Target) {
+    fn swap(&mut self, reg: Target) {
         let v: *mut u8;
         match reg {
             Target::A => v = &mut self.registers.a,
@@ -517,7 +518,7 @@ impl Cpu {
         }
     }
 
-    pub fn jump_by_flag(&mut self, flag: Flag, address: u16) -> bool {
+    fn jump_by_flag(&mut self, flag: Flag, address: u16) -> bool {
         if self.registers.get_flag(flag) {
             self.pc = address;
             return true;
@@ -525,7 +526,7 @@ impl Cpu {
         false
     }
 
-    pub fn jump(&mut self, address: u16) {
+    fn jump(&mut self, address: u16) {
         self.pc = address;
     }
 
@@ -537,18 +538,9 @@ impl Cpu {
         self.registers.b = value;
     }
 
+    #[allow(dead_code)]
     pub fn print_registers(&self) {
-        println!(
-            "Registers {{\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n}}",
-            self.registers.a,
-            self.registers.b,
-            self.registers.c,
-            self.registers.d,
-            self.registers.e,
-            self.registers.f,
-            self.registers.l,
-            self.registers.h
-        );
+        println!("{:#?}", self.registers);
     }
 
     pub fn get_pc(&self) -> u16 {

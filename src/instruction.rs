@@ -9,7 +9,7 @@ pub enum OpCode {
     LD(Target, Target),
     LDA,
     ADD(Target),
-    ADD_16(Target, Target),
+    Add16(Target, Target),
     ADDHL(Target),
     ADC(Target, Target),
     SUB(Target),
@@ -42,7 +42,7 @@ pub enum OpCode {
     HALT,
 
     JUMP(Flag),
-    JUMP_UNCONDICIONAL,
+    JumpUnconditional,
     CALL(Flag),
 
     PREFIX,
@@ -73,7 +73,7 @@ pub enum Target {
     A8,
     A16,
     SP,
-    SP_R8,
+    SpR8,
 }
 
 #[derive(Debug)]
@@ -238,7 +238,7 @@ lazy_static! {
         m.insert(0xEA as  u8, Instruction::new(OpCode::LD(Target::A16, Target::A), 3, 16, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
         m.insert(0xFA as  u8, Instruction::new(OpCode::LD(Target::A, Target::A16), 3, 16, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
 
-        m.insert(0xF8 as  u8, Instruction::new(OpCode::LD(Target::HL, Target::SP_R8), 2, 12, 0, vec![0, 0, AFFECTED , AFFECTED]));
+        m.insert(0xF8 as  u8, Instruction::new(OpCode::LD(Target::HL, Target::SpR8), 2, 12, 0, vec![0, 0, AFFECTED , AFFECTED]));
         m.insert(0xF9 as  u8, Instruction::new(OpCode::LD(Target::SP, Target::HL), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
 
 
@@ -268,12 +268,12 @@ lazy_static! {
 
 
         // add 16 bit
-        m.insert(0x09 as u8,Instruction::new(OpCode::ADD_16(Target::HL, Target::BC), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
-        m.insert(0x19 as u8,Instruction::new(OpCode::ADD_16(Target::HL, Target::DE), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
-        m.insert(0x29 as u8,Instruction::new(OpCode::ADD_16(Target::HL, Target::HL), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
-        m.insert(0x39 as u8,Instruction::new(OpCode::ADD_16(Target::HL, Target::SP), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
+        m.insert(0x09 as u8,Instruction::new(OpCode::Add16(Target::HL, Target::BC), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
+        m.insert(0x19 as u8,Instruction::new(OpCode::Add16(Target::HL, Target::DE), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
+        m.insert(0x29 as u8,Instruction::new(OpCode::Add16(Target::HL, Target::HL), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
+        m.insert(0x39 as u8,Instruction::new(OpCode::Add16(Target::HL, Target::SP), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
 
-        m.insert(0xE8 as u8,Instruction::new(OpCode::ADD_16(Target::SP, Target::R8), 2, 16, 0, vec![0, 0, AFFECTED, AFFECTED]));
+        m.insert(0xE8 as u8,Instruction::new(OpCode::Add16(Target::SP, Target::R8), 2, 16, 0, vec![0, 0, AFFECTED, AFFECTED]));
 
 
         // Sub
@@ -382,7 +382,7 @@ lazy_static! {
 
 
         m.insert(0xC2 as u8, Instruction::new(OpCode::JUMP(Flag::NotZero), 3, 16, 12, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
-        m.insert(0xC3 as u8, Instruction::new(OpCode::JUMP_UNCONDICIONAL, 3, 16, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0xC3 as u8, Instruction::new(OpCode::JumpUnconditional, 3, 16, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
 
         // Prefix
         m.insert(0xCB as u8, Instruction::new(OpCode::PREFIX, 1, 4, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
@@ -1152,7 +1152,7 @@ impl Instruction {
 
     pub fn fetch(byte: u8, prefixed: bool) -> Option<&'static Instruction> {
         if prefixed {
-            return Self::prefixed_from_byte(byte);
+            return Self::from_byte_prefixed(byte);
         }
 
         Self::from_byte(byte)
@@ -1166,7 +1166,7 @@ impl Instruction {
         None
     }
 
-    fn prefixed_from_byte(byte: u8) -> Option<&'static Instruction> {
+    fn from_byte_prefixed(byte: u8) -> Option<&'static Instruction> {
         let i = PREFIXED_INSTRUCTIONS.get(&byte);
         if let Some(instruction) = i {
             return Some(instruction);
@@ -1201,27 +1201,17 @@ impl Instruction {
         return None;
     }
 
-    pub fn instruction_byte_from_opcode(_op: OpCode) -> u8 {
-        for (code, instruction) in &*INSTRUCTIONS {
-            if instruction.opcode == _op {
-                return code.to_owned();
-            }
+    pub fn byte_from_opcode(op: OpCode) -> Option<u8> {
+        if let Some(byte) = Self::byte_from_opcode_unprefixed(op) {
+            return Some(byte);
+        } else if let Some(byte) = Self::byte_from_opcode_prefixed(op) {
+            return Some(byte);
         }
 
-        panic!("Invalid OpCode");
+        None
     }
 
-    pub fn prefixed_instruction_byte_from_opcode(_op: OpCode) -> u8 {
-        for (code, instruction) in &*PREFIXED_INSTRUCTIONS {
-            if instruction.opcode == _op {
-                return code.to_owned();
-            }
-        }
-
-        panic!("Invalid OpCode");
-    }
-
-    pub fn byte_from_opcode(opcode: OpCode) -> Option<u8> {
+    fn byte_from_opcode_unprefixed(opcode: OpCode) -> Option<u8> {
         for (code, instruction) in &*INSTRUCTIONS {
             if opcode == instruction.opcode {
                 return Some(code.to_owned());
@@ -1230,7 +1220,7 @@ impl Instruction {
         None
     }
 
-    pub fn prefixed_byte_from_opcode(opcode: OpCode) -> Option<u8> {
+    fn byte_from_opcode_prefixed(opcode: OpCode) -> Option<u8> {
         for (code, instruction) in &*PREFIXED_INSTRUCTIONS {
             if opcode == instruction.opcode {
                 return Some(code.to_owned());
@@ -1239,7 +1229,7 @@ impl Instruction {
         None
     }
 
-    pub fn print_instruction_bytes_as_i8() {
+    pub fn print_instruction_bytes_as_char() {
         let mut data = String::new();
 
         println!("Instuction bytes");
@@ -1287,4 +1277,18 @@ fn test_from_opcode() {
     assert!(op.is_some());
     eprintln!("{:#?}", op.unwrap());
     assert!(matches!(op.unwrap().opcode, OpCode::ADD(Target::B)));
+}
+
+#[test]
+fn test_fetch() {
+    let instruction =
+        Instruction::fetch(Instruction::byte_from_opcode(OpCode::NOP).unwrap(), false).unwrap();
+    assert!(instruction.opcode == OpCode::NOP);
+
+    let instruction = Instruction::fetch(
+        Instruction::byte_from_opcode(OpCode::SWAP(Target::A)).unwrap(),
+        true,
+    )
+    .unwrap();
+    assert!(instruction.opcode == OpCode::SWAP(Target::A));
 }

@@ -3,7 +3,7 @@ use crate::utils;
 
 use lmg_offset::Offset;
 
-#[derive(Offset)]
+#[derive(Offset, Debug)]
 pub struct Registers {
     pub a: u8,
     pub f: u8,

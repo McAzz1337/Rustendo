@@ -67,7 +67,7 @@ fn write_program_file(path: String) {
     code.push(Instruction::byte_from_opcode(OpCode::LD(Target::A, Target::D8)).unwrap());
     code.push(0b00011000);
     code.push(Instruction::byte_from_opcode(OpCode::PREFIX).unwrap());
-    code.push(Instruction::prefixed_byte_from_opcode(OpCode::SWAP(Target::A)).unwrap());
+    code.push(Instruction::byte_from_opcode(OpCode::SWAP(Target::A)).unwrap());
 
     fs::write(path, code).expect("Failed to write file");
 }
@@ -78,7 +78,7 @@ fn main() {
     }
 
     if PRINT_OPCODES {
-        Instruction::print_instruction_bytes_as_i8();
+        Instruction::print_instruction_bytes_as_char();
     }
 
     let mut cpu = Cpu::new();
@@ -88,6 +88,8 @@ fn main() {
     read_program_file("program.bin".to_string(), &mut cpu);
 
     cpu.run();
+
+    cpu.print_registers();
 
     println!("a = {}", cpu.get_reg_a());
     _assert_eq!(cpu.get_reg_a(), 0b10000001);

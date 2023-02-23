@@ -13,7 +13,7 @@ impl Memory {
         for i in 0..0xFF {
             memory.write_byte(
                 i,
-                Instruction::instruction_byte_from_opcode(crate::instruction::OpCode::EndOfProgram),
+                Instruction::byte_from_opcode(crate::instruction::OpCode::EndOfProgram).unwrap(),
             );
         }
 
