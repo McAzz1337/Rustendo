@@ -14,6 +14,7 @@ pub struct Cpu {
     pc: u16,
     sp: u16,
     addr: u16,
+    is_prefixed: bool,
 }
 
 impl Cpu {
@@ -24,6 +25,7 @@ impl Cpu {
             pc: 0,
             sp: 0,
             addr: 0,
+            is_prefixed: false,
         }
     }
 
@@ -50,15 +52,18 @@ impl Cpu {
             return false;
         }
 
-        let _pc: u16 = if let Some(instruction) = Instruction::from_byte(instruction_byte) {
-            self.execute(instruction)
-        } else {
-            panic!(
-                "Uknown instruction: 0x{:x} @ address {}",
-                instruction_byte, self.pc
-            );
-        };
-        self.pc = _pc;
+        let pc_increment: u16 =
+            if let Some(instruction) = Instruction::fetch(instruction_byte, self.is_prefixed) {
+                self.is_prefixed = false;
+                self.execute(instruction)
+            } else {
+                panic!(
+                    "Uknown instruction: 0x{:x} @ address {}",
+                    instruction_byte, self.pc
+                );
+            };
+
+        self.pc = pc_increment;
         true
     }
 
@@ -155,7 +160,7 @@ impl Cpu {
                 _ => {}
             },
             OpCode::PREFIX => {
-                // Figure out if something needs to be done here
+                self.is_prefixed = true;
             }
             _ => {
                 panic!("Unimplemented");

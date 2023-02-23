@@ -53,7 +53,7 @@ fn read_program_file(path: String, cpu: &mut Cpu) {
             cpu.write_to_memory(i as u16, code[i]);
             continue;
         }
-        if let Some(instruction) = Instruction::from_byte(code[i]) {
+        if let Some(instruction) = Instruction::look_up(code[i]) {
             has_data = instruction.length > 1;
             println!("{}: {:#?}", i, instruction);
         }
@@ -65,44 +65,11 @@ fn write_program_file(path: String) {
     let mut code: Vec<u8> = vec![];
 
     code.push(Instruction::byte_from_opcode(OpCode::LD(Target::A, Target::D8)).unwrap());
-    code.push(100);
-    code.push(Instruction::byte_from_opcode(OpCode::LD(Target::B, Target::D8)).unwrap());
-    code.push(50);
-    code.push(Instruction::byte_from_opcode(OpCode::ADD(Target::B)).unwrap());
-    code.push(Instruction::byte_from_opcode(OpCode::LD(Target::B, Target::A)).unwrap());
-    code.push(Instruction::byte_from_opcode(OpCode::JUMP(Flag::NotZero)).unwrap());
-    code.push(20);
-
-    let start = code.len();
-    let end = 20;
-    for _i in start..end {
-        code.push(Instruction::byte_from_opcode(OpCode::NOP).unwrap());
-    }
-
-    code.push(Instruction::byte_from_opcode(OpCode::LD(Target::A, Target::D8)).unwrap());
-    code.push(80);
+    code.push(0b00011000);
+    code.push(Instruction::byte_from_opcode(OpCode::PREFIX).unwrap());
+    code.push(Instruction::prefixed_byte_from_opcode(OpCode::SWAP(Target::A)).unwrap());
 
     fs::write(path, code).expect("Failed to write file");
-}
-
-fn write_program(cpu: &mut Cpu) {
-    let code = vec![
-        Instruction::instruction_byte_from_opcode(OpCode::LD(Target::A, Target::D8)),
-        100,
-        Instruction::instruction_byte_from_opcode(OpCode::LD(Target::B, Target::D8)),
-        50,
-        Instruction::instruction_byte_from_opcode(OpCode::ADD(Target::B)),
-        Instruction::instruction_byte_from_opcode(OpCode::LD(Target::B, Target::A)),
-        Instruction::instruction_byte_from_opcode(OpCode::LD(Target::A, Target::D8)),
-        100,
-        Instruction::instruction_byte_from_opcode(OpCode::ADD(Target::B)),
-    ];
-
-    let mut address = 0;
-    for byte in code {
-        cpu.write_to_memory(address, byte);
-        address = address + 1;
-    }
 }
 
 fn main() {
@@ -123,5 +90,5 @@ fn main() {
     cpu.run();
 
     println!("a = {}", cpu.get_reg_a());
-    _assert_eq!(cpu.get_reg_a(), 80);
+    _assert_eq!(cpu.get_reg_a(), 0b10000001);
 }
