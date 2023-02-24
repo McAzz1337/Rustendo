@@ -19,6 +19,7 @@ pub struct Cpu {
     sp: u16,
     addr: u16,
     is_prefixed: bool,
+    interrupts_enabled: bool,
 }
 
 #[allow(dead_code, unused_assignments)]
@@ -31,6 +32,7 @@ impl Cpu {
             sp: 0,
             addr: 0,
             is_prefixed: false,
+            interrupts_enabled: true,
         }
     }
 
@@ -76,6 +78,9 @@ impl Cpu {
         let mut pc_increment = instruction.length as u16;
 
         match instruction.opcode.to_owned() {
+            OpCode::ADC(target) => {
+                self.adc(target);
+            }
             OpCode::BIT(bit, target) => {
                 self.bit(bit, target);
             }
@@ -84,6 +89,12 @@ impl Cpu {
             }
             OpCode::RES(bit, target) => {
                 self.res(bit, target);
+            }
+            OpCode::EnableInterrupt => {
+                self.interrupts_enabled = true;
+            }
+            OpCode::DisableInterrupt => {
+                self.interrupts_enabled = false;
             }
             OpCode::LD(dst, src) => {
                 self.load(dst, src);
@@ -102,17 +113,14 @@ impl Cpu {
             OpCode::ADDHL(target) => {
                 self.add_hl(target);
             }
-            OpCode::ADC(_target, _src) => {
-                todo!();
-            }
             OpCode::SUB(target) => {
                 self.sub(target);
             }
-            OpCode::SBC(_target, _src) => {
-                todo!();
+            OpCode::SBC(target) => {
+                self.sbc(target);
             }
-            OpCode::CP(_target) => {
-                todo!();
+            OpCode::CP(target) => {
+                self.cp(target);
             }
             OpCode::AND(target) => {
                 self.and(target);
@@ -196,6 +204,38 @@ impl Cpu {
         self.pc.wrapping_add(pc_increment)
     }
 
+    fn adc(&mut self, reg: Target) {
+        let v;
+        match reg {
+            Target::A => v = self.registers.a as u16,
+            Target::B => v = self.registers.b as u16,
+            Target::C => v = self.registers.c as u16,
+            Target::D => v = self.registers.d as u16,
+            Target::E => v = self.registers.e as u16,
+            Target::H => v = self.registers.h as u16,
+            Target::L => v = self.registers.l as u16,
+            Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+
+        let carry = self.registers.filter_flag(Flag::Carry) as u16;
+        self.registers
+            .set_flag(Flag::Zero, self.registers.a as u16 + v + carry == 256);
+        self.registers
+            .set_flag(Flag::Carry, self.registers.a as u16 + v + carry > 255);
+        self.registers.set_flag(
+            Flag::HalfCarry,
+            self.registers.a < 0b10000 && self.registers.a as u16 + v + carry > 0b1111,
+        );
+        self.registers.set_flag(Flag::Sub, false);
+
+        self.registers.a = (self.registers.a as u16)
+            .wrapping_add(v)
+            .wrapping_add(carry) as u8;
+    }
+
     fn bit(&mut self, bit: u8, reg: Target) {
         let mut v = 0;
         match reg {
@@ -217,6 +257,66 @@ impl Cpu {
         self.registers.set_flag(Flag::Carry, false);
         self.registers.set_flag(Flag::HalfCarry, true);
         self.registers.set_flag(Flag::Sub, false);
+    }
+
+    fn cp(&mut self, reg: Target) {
+        let v;
+        match reg {
+            Target::A => v = self.registers.a as u16,
+            Target::B => v = self.registers.b as u16,
+            Target::C => v = self.registers.c as u16,
+            Target::D => v = self.registers.d as u16,
+            Target::E => v = self.registers.e as u16,
+            Target::H => v = self.registers.h as u16,
+            Target::L => v = self.registers.l as u16,
+            Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
+            Target::R8 => v = self.memory.read_byte(self.pc + 1) as u16,
+            _ => {
+                panic!("Unimplemented")
+            }
+        }
+
+        let result = self.registers.a as u16 - v;
+        self.registers.set_flag(Flag::Zero, result == 0);
+        self.registers.set_flag(Flag::Sub, true);
+        self.registers.set_flag(Flag::HalfCarry, reg == Target::R8);
+        self.registers.set_flag(
+            Flag::Carry,
+            reg == Target::R8 || (self.registers.a as u16).lt(&v),
+        );
+    }
+
+    fn sbc(&mut self, reg: Target) {
+        let v;
+        match reg {
+            Target::A => v = self.registers.a as u16,
+            Target::B => v = self.registers.b as u16,
+            Target::C => v = self.registers.c as u16,
+            Target::D => v = self.registers.d as u16,
+            Target::E => v = self.registers.e as u16,
+            Target::H => v = self.registers.h as u16,
+            Target::L => v = self.registers.l as u16,
+            Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
+            Target::R8 => v = self.memory.read_byte(self.pc + 1) as u16,
+            _ => {
+                panic!("Unimplemented")
+            }
+        }
+
+        let carry = self.registers.filter_flag(Flag::Carry) as u16;
+        self.registers
+            .set_flag(Flag::Zero, self.registers.a as u16 == v);
+        self.registers.set_flag(Flag::Sub, true);
+        self.registers.set_flag(
+            Flag::Carry,
+            self.registers.a > 0b1111 && self.registers.a as u16 - v - carry < 0b10000,
+        );
+        self.registers
+            .set_flag(Flag::Zero, (self.registers.a as u16).lt(&(v + carry)));
+
+        self.registers.a = (self.registers.a as u16)
+            .wrapping_sub(v)
+            .wrapping_sub(carry) as u8;
     }
 
     fn set(&mut self, bit: u8, reg: Target) {
@@ -1115,6 +1215,30 @@ fn test_res() {
 
     cpu.registers.a = 1;
     cpu.res(0, Target::A);
+
+    assert!(cpu.registers.a == 0);
+}
+
+#[test]
+fn test_sbc() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.set_flag(Flag::Carry, true);
+    cpu.registers.a = 1;
+    cpu.registers.b = 1;
+    cpu.sbc(Target::B);
+
+    assert!(cpu.registers.a == 0xFF);
+}
+
+#[test]
+fn test_adc() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.set_flag(Flag::Carry, true);
+    cpu.registers.a = 254;
+    cpu.registers.b = 1;
+    cpu.adc(Target::B);
 
     assert!(cpu.registers.a == 0);
 }
