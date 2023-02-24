@@ -3,6 +3,11 @@ use crate::utils;
 
 use lmg_offset::Offset;
 
+pub const ZERO_BIT_POS: u8 = 7;
+pub const CARRY_BIT_POS: u8 = 4;
+pub const HALF_CARRY_BIT_POS: u8 = 5;
+pub const SUB_BIT_POS: u8 = 6;
+
 #[derive(Offset, Debug)]
 pub struct Registers {
     pub a: u8,
@@ -25,6 +30,7 @@ pub enum Flag {
     NotZero,
     NotCarry,
     NotHalfCarry,
+    NotSub,
 }
 
 impl Registers {
@@ -45,25 +51,40 @@ impl Registers {
     pub fn get_flag(&self, flag: Flag) -> bool {
         match flag {
             Flag::Zero => {
-                return (self.f >> 7) == 1;
+                return (self.f >> ZERO_BIT_POS) == 1;
             }
             Flag::Carry => {
-                return (self.f & (1 << 4)) >= 1;
+                return (self.f & (1 << CARRY_BIT_POS)) >= 1;
             }
             Flag::HalfCarry => {
-                return (self.f & (1 << 5)) >= 1;
+                return (self.f & (1 << HALF_CARRY_BIT_POS)) >= 1;
             }
             Flag::Sub => {
-                return (self.f & (1 << 6)) >= 1;
+                return (self.f & (1 << SUB_BIT_POS)) >= 1;
             }
             Flag::NotZero => {
-                return (self.f >> 7) == 0;
+                return (self.f >> ZERO_BIT_POS) == 0;
             }
             Flag::NotCarry => {
-                return (self.f & (1 << 4)) == 0;
+                return (self.f & (1 << CARRY_BIT_POS)) == 0;
             }
             Flag::NotHalfCarry => {
-                return (self.f & (1 << 5)) == 0;
+                return (self.f & (1 << HALF_CARRY_BIT_POS)) == 0;
+            }
+            Flag::NotSub => {
+                return (self.f & (1 << SUB_BIT_POS)) == 0;
+            }
+        }
+    }
+
+    pub fn filter_flag(&self, flag: Flag) -> u8 {
+        match flag {
+            Flag::Zero => return (self.f & (1 << ZERO_BIT_POS)) >> ZERO_BIT_POS,
+            Flag::Carry => return (self.f & (1 << CARRY_BIT_POS)) >> CARRY_BIT_POS,
+            Flag::HalfCarry => return (self.f & (1 << HALF_CARRY_BIT_POS)) >> HALF_CARRY_BIT_POS,
+            Flag::Sub => return (self.f & (1 << SUB_BIT_POS)) >> SUB_BIT_POS,
+            _ => {
+                panic!("Unimplemented");
             }
         }
     }
@@ -94,6 +115,14 @@ impl Registers {
             self.f = self.f & mask;
         } else {
             self.f = self.f | mask;
+        }
+    }
+
+    pub fn set_flag_from_u8(&mut self, flag: Flag, bit: u8) {
+        if bit == 0 {
+            self.set_flag(flag, false);
+        } else {
+            self.set_flag(flag, true);
         }
     }
 
