@@ -1,11 +1,13 @@
 use crate::instruction::Target;
+
+#[allow(unused_imports)]
+use crate::registers::{CARRY_BIT_POS, HALF_CARRY_BIT_POS, SUB_BIT_POS, ZERO_BIT_POS};
+
 use crate::Flag;
 use crate::Instruction;
 use crate::Memory;
 use crate::OpCode;
 use crate::Registers;
-
-use crate::registers::{CARRY_BIT_POS, HALF_CARRY_BIT_POS, SUB_BIT_POS, ZERO_BIT_POS};
 
 use std::ptr;
 
@@ -19,6 +21,7 @@ pub struct Cpu {
     is_prefixed: bool,
 }
 
+#[allow(dead_code, unused_assignments)]
 impl Cpu {
     pub fn new() -> Cpu {
         Cpu {
@@ -73,6 +76,15 @@ impl Cpu {
         let mut pc_increment = instruction.length as u16;
 
         match instruction.opcode.to_owned() {
+            OpCode::BIT(bit, target) => {
+                self.bit(bit, target);
+            }
+            OpCode::SET(bit, target) => {
+                self.set(bit, target);
+            }
+            OpCode::RES(bit, target) => {
+                self.res(bit, target);
+            }
             OpCode::LD(dst, src) => {
                 self.load(dst, src);
                 if src == Target::D8 {
@@ -182,6 +194,72 @@ impl Cpu {
         }
 
         self.pc.wrapping_add(pc_increment)
+    }
+
+    fn bit(&mut self, bit: u8, reg: Target) {
+        let mut v = 0;
+        match reg {
+            Target::A => v = self.registers.a,
+            Target::B => v = self.registers.b,
+            Target::C => v = self.registers.c,
+            Target::D => v = self.registers.d,
+            Target::E => v = self.registers.e,
+            Target::H => v = self.registers.h,
+            Target::L => v = self.registers.l,
+            // Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+        let bit = v & (1 << bit);
+
+        self.registers.set_flag(Flag::Zero, bit != 0);
+        self.registers.set_flag(Flag::Carry, false);
+        self.registers.set_flag(Flag::HalfCarry, true);
+        self.registers.set_flag(Flag::Sub, false);
+    }
+
+    fn set(&mut self, bit: u8, reg: Target) {
+        let mut v: *mut u8 = ptr::null_mut();
+        match reg {
+            Target::A => v = &mut self.registers.a,
+            Target::B => v = &mut self.registers.b,
+            Target::C => v = &mut self.registers.c,
+            Target::D => v = &mut self.registers.d,
+            Target::E => v = &mut self.registers.e,
+            Target::H => v = &mut self.registers.h,
+            Target::L => v = &mut self.registers.l,
+            // Target::HL => v = &mut self.registers.h,
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+
+        unsafe {
+            *v = *v | (1 << bit);
+        }
+    }
+
+    fn res(&mut self, bit: u8, reg: Target) {
+        let mut v: *mut u8 = ptr::null_mut();
+        match reg {
+            Target::A => v = &mut self.registers.a,
+            Target::B => v = &mut self.registers.b,
+            Target::C => v = &mut self.registers.c,
+            Target::D => v = &mut self.registers.d,
+            Target::E => v = &mut self.registers.e,
+            Target::H => v = &mut self.registers.h,
+            Target::L => v = &mut self.registers.l,
+            // Target::HL => v = &mut self.registers.a,
+            _ => {
+                panic!("Unimplemented");
+            }
+        }
+
+        let mask = !(1 << bit);
+        unsafe {
+            *v = *v & mask;
+        }
     }
 
     #[allow(unused_assignments)]
@@ -624,6 +702,7 @@ impl Cpu {
         }
     }
 
+    #[allow(dead_code)]
     fn sl(&mut self, reg: Target) {
         match reg {
             Target::A => self.registers.a = self.registers.a << 1,
@@ -1002,4 +1081,40 @@ fn test_sla() {
     cpu.sla(Target::A);
 
     assert!(cpu.registers.a == 3);
+}
+
+#[test]
+fn test_bit() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 0b10000000;
+    cpu.bit(7, Target::A);
+
+    assert!(cpu.registers.get_flag(Flag::Zero));
+    assert!(!cpu.registers.get_flag(Flag::Sub));
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(cpu.registers.get_flag(Flag::HalfCarry));
+}
+
+#[test]
+fn test_set() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 0;
+    cpu.set(7, Target::A);
+
+    assert!(cpu.registers.a == 128);
+
+    cpu.registers.a = cpu.registers.a | 1;
+    assert!(cpu.registers.a == 129);
+}
+
+#[test]
+fn test_res() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 1;
+    cpu.res(0, Target::A);
+
+    assert!(cpu.registers.a == 0);
 }

@@ -90,20 +90,20 @@ impl Registers {
     }
 
     pub fn set_flag(&mut self, flag: Flag, v: bool) {
-        let mut mask = 1;
+        let mut mask;
 
         match flag {
             Flag::Zero => {
-                mask = mask << 7;
+                mask = 1 << ZERO_BIT_POS;
             }
             Flag::Carry => {
-                mask = mask << 4;
+                mask = 1 << CARRY_BIT_POS;
             }
             Flag::HalfCarry => {
-                mask = mask << 5;
+                mask = 1 << HALF_CARRY_BIT_POS;
             }
             Flag::Sub => {
-                mask = mask << 6;
+                mask = 1 << SUB_BIT_POS;
             }
             _ => {
                 panic!("Invalid flag as Input!");
