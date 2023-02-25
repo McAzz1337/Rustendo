@@ -28,6 +28,10 @@ impl Memory {
         self.memory[address as usize] = byte;
     }
 
+    pub fn get_pointer(&mut self, address: u16) -> *mut u8 {
+        &mut self.memory[address as usize]
+    }
+
     pub fn read_as_binary_string(&self, address: u16) -> String {
         utils::as_bit_string(self.memory[address as usize])
     }

@@ -18,7 +18,6 @@ pub struct Registers {
     pub e: u8,
     pub h: u8,
     pub l: u8,
-    pub hl: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,7 +43,6 @@ impl Registers {
             f: 0,
             l: 0,
             h: 0,
-            hl: 0,
         }
     }
 
@@ -126,166 +124,6 @@ impl Registers {
         }
     }
 
-    pub fn rotate_right(&mut self, reg: Target) {
-        match reg {
-            Target::A => {
-                let x = (self.a & 1) << 7;
-                self.a = self.a >> 1;
-                self.a = self.a | x;
-            }
-            Target::B => {
-                let x = (self.b & 1) << 7;
-                self.b = self.b >> 1;
-                self.b = self.b | x;
-            }
-            Target::C => {
-                let x = (self.c & 1) << 7;
-                self.c = self.c >> 1;
-                self.c = self.c | x;
-            }
-            Target::D => {
-                let x = (self.d & 1) << 7;
-                self.d = self.d >> 1;
-                self.d = self.d | x;
-            }
-            Target::E => {
-                let x = (self.e & 1) << 7;
-                self.e = self.e >> 1;
-                self.e = self.e | x;
-            }
-            Target::F => {
-                let x = (self.f & 1) << 7;
-                self.f = self.f >> 1;
-                self.f = self.f | x;
-            }
-            Target::L => {
-                let x = (self.l & 1) << 7;
-                self.l = self.l >> 1;
-                self.l = self.l | x;
-            }
-            Target::H => {
-                let x = (self.h & 1) << 7;
-                self.h = self.h >> 1;
-                self.h = self.h | x;
-            }
-            _ => {
-                panic!("Unimplemented");
-            }
-        }
-    }
-
-    pub fn rotate_left(&mut self, reg: Target) {
-        match reg {
-            Target::A => {
-                let x = (self.a & 0b10000000) >> 7;
-                self.a = self.a << 1;
-                self.a = self.a | x;
-            }
-            Target::B => {
-                let x = (self.b & 0b10000000) >> 7;
-                self.b = self.b << 1;
-                self.b = self.b | x;
-            }
-            Target::C => {
-                let x = (self.c & 0b10000000) >> 7;
-                self.c = self.c << 1;
-                self.c = self.c | x;
-            }
-            Target::D => {
-                let x = (self.d & 0b10000000) >> 7;
-                self.d = self.d << 1;
-                self.d = self.d | x;
-            }
-            Target::E => {
-                let x = (self.e & 0b10000000) >> 7;
-                self.e = self.e << 1;
-                self.e = self.e | x;
-            }
-            Target::F => {
-                let x = (self.f & 0b10000000) >> 7;
-                self.f = self.f << 1;
-                self.f = self.f | x;
-            }
-            Target::L => {
-                let x = (self.l & 0b10000000) >> 7;
-                self.l = self.l << 1;
-                self.l = self.l | x;
-            }
-            Target::H => {
-                let x = (self.h & 0b10000000) >> 7;
-                self.h = self.h << 1;
-                self.h = self.h | x;
-            }
-            _ => {
-                panic!("Unimplemented");
-            }
-        }
-    }
-
-    pub fn shift_right(&mut self, reg: Target) {
-        match reg {
-            Target::A => {
-                self.a = self.a >> 1;
-            }
-            Target::B => {
-                self.b = self.b >> 1;
-            }
-            Target::C => {
-                self.c = self.c >> 1;
-            }
-            Target::D => {
-                self.d = self.d >> 1;
-            }
-            Target::E => {
-                self.e = self.e >> 1;
-            }
-            Target::F => {
-                self.f = self.f >> 1;
-            }
-            Target::L => {
-                self.l = self.l >> 1;
-            }
-            Target::H => {
-                self.h = self.h >> 1;
-            }
-            _ => {
-                panic!("Unimplemented");
-            }
-        }
-    }
-
-    pub fn shift_left(&mut self, reg: Target) {
-        match reg {
-            Target::A => {
-                self.a = self.a << 1;
-            }
-            Target::B => {
-                self.b = self.b << 1;
-            }
-            Target::C => {
-                self.c = self.c << 1;
-            }
-            Target::D => {
-                self.d = self.d << 1;
-            }
-            Target::E => {
-                self.e = self.e << 1;
-            }
-            Target::F => {
-                self.f = self.f << 1;
-            }
-            Target::L => {
-                self.l = self.l << 1;
-            }
-            Target::H => {
-                self.h = self.h << 1;
-            }
-            _ => {
-                panic!("Unimplemented");
-            }
-        }
-    }
-
     pub fn get_bit(&self, reg: Target, bit: &u32) -> bool {
         let mask = 1 << bit;
         match reg {
@@ -338,6 +176,17 @@ impl Registers {
         }
     }
 
+    pub fn combined_value(&self, reg: Target) -> u16 {
+        match reg {
+            Target::HL => ((self.h as u16) << 8) | self.l as u16,
+            Target::BC => ((self.b as u16) << 8) | self.c as u16,
+            Target::DE => ((self.d as u16) << 8) | self.e as u16,
+            _ => {
+                panic!("Unimplemented {:#?}", reg);
+            }
+        }
+    }
+
     pub fn register_as_bit_string(&self, reg: Target) -> String {
         match reg {
             Target::A => return utils::as_bit_string(self.a),
@@ -369,28 +218,17 @@ impl Registers {
             }
         }
     }
-}
 
-#[test]
-fn test_rotate() {
-    let mut reg = Registers::new();
-    reg.a = 1;
-    reg.rotate_right(Target::A);
-    assert!(reg.a == 128);
-
-    reg.rotate_left(Target::A);
-    assert!(reg.a == 1);
-}
-
-#[test]
-fn test_shift() {
-    let mut reg = Registers::new();
-    reg.a = 1;
-    reg.shift_left(Target::A);
-    assert!(reg.a == 2);
-
-    reg.shift_right(Target::A);
-    assert!(reg.a == 1);
+    pub fn reset(&mut self) {
+        self.a = 0;
+        self.b = 0;
+        self.c = 0;
+        self.d = 0;
+        self.e = 0;
+        self.f = 0;
+        self.h = 0;
+        self.l = 0;
+    }
 }
 
 #[test]

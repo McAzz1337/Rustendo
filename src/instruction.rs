@@ -9,8 +9,7 @@ pub enum OpCode {
     LD(Target, Target),
     LDA,
     ADD(Target),
-    Add16(Target, Target),
-    ADDHL(Target),
+    ADD16(Target, Target),
     ADC(Target),
     SUB(Target),
     SBC(Target),
@@ -22,8 +21,6 @@ pub enum OpCode {
     DEC(Target),
     CCF,          //Toggle value of carry flag
     SCF,          // set carry flag to true
-    RRA,          // rotate right a reg
-    RLA,          // rotate left a reg
     RRCA,         // roatet right a reg no through carry flag
     RRLA,         // totate left a rg not through carry flag
     CPL(Target),  // toggle every bit of a reg
@@ -119,7 +116,7 @@ static AFFECTED: u8 = 2;
 static NOT_AFFECTED: u8 = 3;
 
 lazy_static! {
-    static ref INSTRUCTIONS: HashMap<u8, Instruction> = {
+    pub static ref INSTRUCTIONS: HashMap<u8, Instruction> = {
         let mut m = HashMap::new();
 
         m.insert(0x00 as  u8, Instruction::new(OpCode::NOP, 1, 4, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED ,NOT_AFFECTED]));
@@ -268,12 +265,12 @@ lazy_static! {
 
 
         // add 16 bit
-        m.insert(0x09 as u8,Instruction::new(OpCode::Add16(Target::HL, Target::BC), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
-        m.insert(0x19 as u8,Instruction::new(OpCode::Add16(Target::HL, Target::DE), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
-        m.insert(0x29 as u8,Instruction::new(OpCode::Add16(Target::HL, Target::HL), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
-        m.insert(0x39 as u8,Instruction::new(OpCode::Add16(Target::HL, Target::SP), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
+        m.insert(0x09 as u8,Instruction::new(OpCode::ADD16(Target::HL, Target::BC), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
+        m.insert(0x19 as u8,Instruction::new(OpCode::ADD16(Target::HL, Target::DE), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
+        m.insert(0x29 as u8,Instruction::new(OpCode::ADD16(Target::HL, Target::HL), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
+        m.insert(0x39 as u8,Instruction::new(OpCode::ADD16(Target::HL, Target::SP), 1, 8, 0, vec![NOT_AFFECTED, 0, AFFECTED, AFFECTED]));
 
-        m.insert(0xE8 as u8,Instruction::new(OpCode::Add16(Target::SP, Target::R8), 2, 16, 0, vec![0, 0, AFFECTED, AFFECTED]));
+        m.insert(0xE8 as u8,Instruction::new(OpCode::ADD16(Target::SP, Target::R8), 2, 16, 0, vec![0, 0, AFFECTED, AFFECTED]));
 
 
         // Sub
@@ -393,7 +390,7 @@ lazy_static! {
 
 
         // End of program instruction, only used for debugging
-        m.insert(0xFF as u8, Instruction::new(OpCode::EndOfProgram, 0, 0, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0xFD as u8, Instruction::new(OpCode::EndOfProgram, 0, 0, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
 
 
 

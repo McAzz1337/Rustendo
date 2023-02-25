@@ -15,6 +15,8 @@ use crate::memory::Memory;
 use crate::registers::Flag;
 use crate::registers::Registers;
 
+use crate::instruction::INSTRUCTIONS;
+
 use std::fs;
 
 macro_rules! _assert_eq {
@@ -39,8 +41,9 @@ macro_rules! _assert {
     };
 }
 
-static CHECK_INSTRUCTION_COMPLETENESS: bool = false;
+static CHECK_INSTRUCTION_DEFINITION_COMPLETENESS: bool = false;
 static PRINT_OPCODES: bool = false;
+static CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENESS: bool = true;
 
 fn read_program_file(path: String, cpu: &mut Cpu) {
     let code = fs::read(path).expect("Failed to read file");
@@ -73,7 +76,16 @@ fn write_program_file(path: String) {
 }
 
 fn main() {
-    if CHECK_INSTRUCTION_COMPLETENESS {
+    if CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENESS {
+        let mut cpu = Cpu::new();
+        for i in INSTRUCTIONS.clone() {
+            cpu.execute(&i.1);
+            cpu.reset_registers();
+        }
+        return;
+    }
+
+    if CHECK_INSTRUCTION_DEFINITION_COMPLETENESS {
         Instruction::test_instruction_completeness();
     }
 
@@ -84,7 +96,7 @@ fn main() {
     let mut cpu = Cpu::new();
 
     // write_program(&mut cpu);
-    write_program_file("program.bin".to_string());
+    // write_program_file("program.bin".to_string());
     read_program_file("program.bin".to_string(), &mut cpu);
 
     cpu.run();
