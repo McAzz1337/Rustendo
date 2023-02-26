@@ -176,11 +176,31 @@ impl Registers {
         }
     }
 
-    pub fn combined_value(&self, reg: Target) -> u16 {
+    pub fn combined_register(&self, reg: Target) -> u16 {
         match reg {
             Target::HL => ((self.h as u16) << 8) | self.l as u16,
             Target::BC => ((self.b as u16) << 8) | self.c as u16,
             Target::DE => ((self.d as u16) << 8) | self.e as u16,
+            _ => {
+                panic!("Unimplemented {:#?}", reg);
+            }
+        }
+    }
+
+    pub fn set_combined_register(&mut self, reg: Target, v: u16) {
+        match reg {
+            Target::HL => {
+                self.h = ((v & 0b1111111100000000) >> 8) as u8;
+                self.l = (v & 0b11111111) as u8;
+            }
+            Target::BC => {
+                self.b = ((v & 0b1111111100000000) >> 8) as u8;
+                self.c = (v & 0b11111111) as u8;
+            }
+            Target::DE => {
+                self.d = ((v & 0b1111111100000000) >> 8) as u8;
+                self.e = (v & 0b11111111) as u8;
+            }
             _ => {
                 panic!("Unimplemented {:#?}", reg);
             }
@@ -228,6 +248,13 @@ impl Registers {
         self.f = 0;
         self.h = 0;
         self.l = 0;
+    }
+
+    pub fn is_16bit_target(&self, reg: Target) -> bool {
+        match reg {
+            Target::SP | Target::SpR8 | Target::D16 => return true,
+            _ => return false,
+        }
     }
 }
 

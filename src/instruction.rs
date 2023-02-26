@@ -364,7 +364,7 @@ lazy_static! {
         m.insert(0x3C as u8, Instruction::new(OpCode::INC(Target::A), 1, 4, 0, vec![AFFECTED, 0, AFFECTED, NOT_AFFECTED]));
 
         // DEC
-        m.insert(0x04 as u8, Instruction::new(OpCode::DEC(Target::B), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
+        m.insert(0x05 as u8, Instruction::new(OpCode::DEC(Target::B), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
         m.insert(0x0D as u8, Instruction::new(OpCode::DEC(Target::C), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
 
 
@@ -1255,7 +1255,14 @@ impl Instruction {
     }
 
     pub fn test_instruction_completeness() {
-        for i in 0..0xFF {
+        let ignored = vec![
+            0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD,
+        ];
+
+        for i in 0..=0xFF {
+            if ignored.contains(&i) {
+                continue;
+            }
             let instruction = Instruction::from_byte(i);
             match instruction {
                 None => {

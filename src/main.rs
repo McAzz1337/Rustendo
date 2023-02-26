@@ -17,6 +17,7 @@ use crate::registers::Registers;
 
 use crate::instruction::INSTRUCTIONS;
 
+use std::env;
 use std::fs;
 
 macro_rules! _assert_eq {
@@ -41,9 +42,9 @@ macro_rules! _assert {
     };
 }
 
-static CHECK_INSTRUCTION_DEFINITION_COMPLETENESS: bool = false;
+static CHECK_INSTRUCTION_DEFINITION_COMPLETENES: bool = true;
 static PRINT_OPCODES: bool = false;
-static CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENESS: bool = true;
+static CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES: bool = false;
 
 fn read_program_file(path: String, cpu: &mut Cpu) {
     let code = fs::read(path).expect("Failed to read file");
@@ -76,17 +77,30 @@ fn write_program_file(path: String) {
 }
 
 fn main() {
-    if CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENESS {
+    if CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES {
+        // env::set_var("RUST_BACKTRACE", "1");
         let mut cpu = Cpu::new();
-        for i in INSTRUCTIONS.clone() {
-            cpu.execute(&i.1);
-            cpu.reset_registers();
+        cpu.zero_memory();
+
+        for i in 0..=0xFF {
+            if let Some(instruction) = Instruction::fetch(i, false) {
+                // println!("Executing instruction: [{:#x}] {:#?}", i, instruction);
+                cpu.execute(instruction);
+                cpu.reset_registers();
+            }
         }
+
+        // for i in INSTRUCTIONS.clone() {
+        //     println!("Executing instruction: [{:#x}] {:#?}", &i.0, &i.1);
+        //     cpu.execute(&i.1);
+        //     cpu.reset_registers();
+        // }
         return;
     }
 
-    if CHECK_INSTRUCTION_DEFINITION_COMPLETENESS {
+    if CHECK_INSTRUCTION_DEFINITION_COMPLETENES {
         Instruction::test_instruction_completeness();
+        return;
     }
 
     if PRINT_OPCODES {
