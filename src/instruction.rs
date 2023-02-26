@@ -6,57 +6,58 @@ use std::io::prelude::*;
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpCode {
-    NOP,
-    LD(Target, Target),
-    LDA,
+    ADC(Target),
     ADD(Target),
     ADD16(Target, Target),
-    ADC(Target),
-    SUB(Target),
-    SBC(Target),
-    CP(Target), // like sub but result not stored back into a
     AND(Target),
-    OR(Target),
-    XOR(Target),
-    INC(Target),
-    DEC(Target),
-    CCF,         //Toggle value of carry flag
-    SCF,         // set carry flag to true
-    RRLA,        // totate left a rg not through carry flag
-    CPL(Target), // toggle every bit of a reg
-    SRL(Target), // right shift of specific regiser
-    RR(Target),  //rotate right specific register through carry flag
-    RL(Target),  //rotate left specific register through carry flag
-    RRC(Target), // rotate right specific register not through carry flag
-    RLC(Target), // rotate left specific register not through carry flag
-    RLA,
-    RRA,
-    RCA,
-    RLCA,
-    RRCA,
-    SRA(Target),  // shift right by 1
-    SLA(Target),  // shift left by 1
-    SWAP(Target), //swap upper and lower nibble
     BIT(u8, Target),
-    RES(u8, Target),
-    SET(u8, Target),
-
-    HALT,
-
-    JR(Flag),
-    JRUC, // special case for JR r8 instruction
-    JUMP(Flag),
-    JP,
     CALL(Flag),
     CALL_UC,
-    RST(u16),
+    CB,         //Prefix
+    CCF,        //Toggle value of carry flag
+    CP(Target), // like sub but result not stored back into a
+    CPL,
+    DEC(Target),
+    DEC16(Target),
+    DisableInterrupt,
+    EnableInterrupt,
+    HALT,
+    INC(Target),
+    INC16(Target),
+    JUMP(Flag),
+    JP,
+    JR(Flag),
+    JRUC, // special case for JR r8 instruction
+    LD(Target, Target),
+    LDA,
+    NOP,
+    OR(Target),
+    RES(u8, Target),
     RET_UC,
     RET(Flag),
     RETI,
+    RL(Target), //rotate left specific register through carry flag
+    RLA,
+    RLC(Target), // rotate left specific register not through carry flag
+    RLCA,
+    RCA,
+    RR(Target), //rotate right specific register through carry flag
+    RRA,
+    RRC(Target), // rotate right specific register not through carry flag
+    RRCA,
+    RRLA, // totate left a rg not through carry flag
+    RST(u16),
+    SBC(Target),
+    SCF, // set carry flag to true
+    SET(u8, Target),
+    SLA(Target), // shift left by 1
+    SRA(Target), // shift right by 1
+    SRL(Target), // right shift of specific regiser
+    STOP,
+    SUB(Target),
+    SWAP(Target), //swap upper and lower nibble
 
-    PREFIX,
-    EnableInterrupt,
-    DisableInterrupt,
+    XOR(Target),
     EndOfProgram,
 }
 
@@ -359,41 +360,52 @@ lazy_static! {
         m.insert(0xBF as u8, Instruction::new(OpCode::CP(Target::A), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, AFFECTED]));
 
         // INC
-        m.insert(0x03 as u8, Instruction::new(OpCode::INC(Target::BC), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
         m.insert(0x04 as u8, Instruction::new(OpCode::INC(Target::B), 1, 4, 0, vec![AFFECTED, 0, AFFECTED, NOT_AFFECTED]));
         m.insert(0x0C as u8, Instruction::new(OpCode::INC(Target::C), 1, 4, 0, vec![AFFECTED, 0, AFFECTED, NOT_AFFECTED]));
 
-        m.insert(0x13 as u8, Instruction::new(OpCode::INC(Target::DE), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
         m.insert(0x14 as u8, Instruction::new(OpCode::INC(Target::D), 1, 4, 0, vec![AFFECTED, 0, AFFECTED, NOT_AFFECTED]));
         m.insert(0x1C as u8, Instruction::new(OpCode::INC(Target::E), 1, 4, 0, vec![AFFECTED, 0, AFFECTED, NOT_AFFECTED]));
 
-        m.insert(0x23 as u8, Instruction::new(OpCode::INC(Target::HL), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
         m.insert(0x24 as u8, Instruction::new(OpCode::INC(Target::H), 1, 4, 0, vec![AFFECTED, 0, AFFECTED, NOT_AFFECTED]));
         m.insert(0x2C as u8, Instruction::new(OpCode::INC(Target::L), 1, 4, 0, vec![AFFECTED, 0, AFFECTED, NOT_AFFECTED]));
 
 
-        m.insert(0x33 as u8, Instruction::new(OpCode::INC(Target::SP), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
         m.insert(0x34 as u8, Instruction::new(OpCode::INC(Target::HL), 1, 12, 0, vec![AFFECTED, 0, AFFECTED, NOT_AFFECTED]));
         m.insert(0x3C as u8, Instruction::new(OpCode::INC(Target::A), 1, 4, 0, vec![AFFECTED, 0, AFFECTED, NOT_AFFECTED]));
+
+        // INC16
+        m.insert(0x03 as u8, Instruction::new(OpCode::INC16(Target::BC), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0x13 as u8, Instruction::new(OpCode::INC16(Target::DE), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0x23 as u8, Instruction::new(OpCode::INC16(Target::HL), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0x33 as u8, Instruction::new(OpCode::INC16(Target::SP), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+
 
         // DEC
         m.insert(0x05 as u8, Instruction::new(OpCode::DEC(Target::B), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
         m.insert(0x0D as u8, Instruction::new(OpCode::DEC(Target::C), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
 
-
-        m.insert(0x14 as u8, Instruction::new(OpCode::DEC(Target::D), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
+        m.insert(0x15 as u8, Instruction::new(OpCode::DEC(Target::D), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
         m.insert(0x1D as u8, Instruction::new(OpCode::DEC(Target::E), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
 
-        m.insert(0x24 as u8, Instruction::new(OpCode::DEC(Target::H), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
+        m.insert(0x25 as u8, Instruction::new(OpCode::DEC(Target::H), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
+        m.insert(0x35 as u8, Instruction::new(OpCode::DEC(Target::HL), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
         m.insert(0x2D as u8, Instruction::new(OpCode::DEC(Target::L), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
 
-        m.insert(0x34 as u8, Instruction::new(OpCode::DEC(Target::HL), 1, 12, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
         m.insert(0x3D as u8, Instruction::new(OpCode::DEC(Target::A), 1, 4, 0, vec![AFFECTED, 1, AFFECTED, NOT_AFFECTED]));
 
+        // DEC16
+        m.insert(0x0B as u8, Instruction::new(OpCode::DEC16(Target::BC), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0x1B as u8, Instruction::new(OpCode::DEC16(Target::DE), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0x2B as u8, Instruction::new(OpCode::DEC16(Target::HL), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0x3B as u8, Instruction::new(OpCode::DEC16(Target::SP), 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+
+
+        // CPL
+        m.insert(0x2F as u8, Instruction::new(OpCode::CPL, 1, 4, 0, vec![NOT_AFFECTED, 1, 1, NOT_AFFECTED]));
 
 
         // Prefix
-        m.insert(0xCB as u8, Instruction::new(OpCode::PREFIX, 1, 4, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0xCB as u8, Instruction::new(OpCode::CB, 1, 4, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
 
         // Enable / disable interrupts
         m.insert(0xF3 as u8, Instruction::new(OpCode::DisableInterrupt, 1, 4, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
@@ -449,6 +461,24 @@ lazy_static! {
 
         m.insert(0xD9 as u8, Instruction::new(OpCode::RETI, 1, 8, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
 
+        //STOP
+        m.insert(0x10 as u8, Instruction::new(OpCode::STOP, 2, 4, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+
+        //SCF
+        m.insert(0x37 as u8, Instruction::new(OpCode::SCF, 1, 4, 0, vec![NOT_AFFECTED, 0, 0, 1]));
+
+        //CCF
+        m.insert(0x3F as u8, Instruction::new(OpCode::CCF, 1, 4, 0, vec![NOT_AFFECTED, 0, 0, AFFECTED]));
+
+        //RET
+        m.insert(0xC1 as u8, Instruction::new(OpCode::RET(Flag::NotZero), 1, 20, 8, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0xD1 as u8, Instruction::new(OpCode::RET(Flag::NotCarry), 1, 20, 8, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+
+        m.insert(0xC8 as u8, Instruction::new(OpCode::RET(Flag::Zero), 1, 20, 8, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0xD8 as u8, Instruction::new(OpCode::RET(Flag::Carry), 1, 20, 8, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+
+        m.insert(0xC9 as u8, Instruction::new(OpCode::RET_UC, 1, 16, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0xD9 as u8, Instruction::new(OpCode::RETI, 1, 16, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
 
 
         // End of program instruction, only used for debugging

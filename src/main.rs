@@ -70,7 +70,7 @@ fn write_program_file(path: String) {
 
     code.push(Instruction::byte_from_opcode(OpCode::LD(Target::A, Target::D8)).unwrap());
     code.push(0b00011000);
-    code.push(Instruction::byte_from_opcode(OpCode::PREFIX).unwrap());
+    code.push(Instruction::byte_from_opcode(OpCode::CB).unwrap());
     code.push(Instruction::byte_from_opcode(OpCode::SWAP(Target::A)).unwrap());
 
     fs::write(path, code).expect("Failed to write file");

@@ -53,6 +53,7 @@ pub struct Cpu {
     addr: u16,
     is_prefixed: bool,
     interrupts_enabled: bool,
+    is_stopped: bool,
 }
 
 #[allow(dead_code, unused_assignments)]
@@ -66,6 +67,7 @@ impl Cpu {
             addr: 0,
             is_prefixed: false,
             interrupts_enabled: true,
+            is_stopped: false,
         }
     }
 
@@ -148,16 +150,19 @@ impl Cpu {
             }
             OpCode::CCF => {
                 self.registers
-                    .set_flag(Flag::Carry, !self.registers.get_flag(Flag::Zero));
+                    .set_flag(Flag::Carry, !self.registers.get_flag(Flag::Carry));
             }
             OpCode::CP(target) => {
                 self.cp(target);
             }
-            OpCode::CPL(target) => {
-                self.cpl(target);
+            OpCode::CPL => {
+                self.cpl();
             }
             OpCode::DEC(target) => {
                 self.dec(target);
+            }
+            OpCode::DEC16(target) => {
+                self.dec_16(target);
             }
             OpCode::DisableInterrupt => {
                 self.interrupts_enabled = false;
@@ -168,6 +173,9 @@ impl Cpu {
             OpCode::HALT => {}
             OpCode::INC(target) => {
                 self.inc(target);
+            }
+            OpCode::INC16(target) => {
+                self.inc_16(target);
             }
             OpCode::JUMP(flag) => {
                 if self.jump_by_flag(flag) {
@@ -200,7 +208,7 @@ impl Cpu {
             OpCode::OR(target) => {
                 self.or(target);
             }
-            OpCode::PREFIX => {
+            OpCode::CB => {
                 self.is_prefixed = true;
             }
             OpCode::RES(bit, target) => {
@@ -268,17 +276,8 @@ impl Cpu {
             OpCode::SUB(target) => {
                 self.sub(target);
             }
-            OpCode::RL(target) => {
-                self.rl(target);
-            }
-            OpCode::RLC(target) => {
-                self.rlc(target);
-            }
-            OpCode::RR(target) => {
-                self.rr(target);
-            }
-            OpCode::RRC(target) => {
-                self.rrc(target);
+            OpCode::STOP => {
+                self.is_stopped = true;
             }
             OpCode::SLA(target) => {
                 self.sla(target);
@@ -504,20 +503,8 @@ impl Cpu {
         );
     }
 
-    fn cpl(&mut self, reg: Target) {
-        match reg {
-            Target::A => self.registers.a = !self.registers.a,
-            Target::B => self.registers.b = !self.registers.b,
-            Target::C => self.registers.c = !self.registers.c,
-            Target::D => self.registers.d = !self.registers.d,
-            Target::E => self.registers.e = !self.registers.e,
-            Target::F => self.registers.f = !self.registers.f,
-            Target::L => self.registers.l = !self.registers.l,
-            Target::H => self.registers.h = !self.registers.h,
-            _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::CPL(reg)));
-            }
-        }
+    fn cpl(&mut self) {
+        self.registers.a = !self.registers.a;
     }
 
     fn dec(&mut self, target: Target) {
@@ -531,8 +518,16 @@ impl Cpu {
             Target::F => v = &mut self.registers.f,
             Target::L => v = &mut self.registers.l,
             Target::H => v = &mut self.registers.h,
-            Target::HL | Target::BC | Target::DE | Target::SP => {
-                self.dec_16(target);
+            Target::HL => {
+                let mut v = self
+                    .memory
+                    .read_byte(self.registers.combined_register(target));
+                self.registers.set_flag(Flag::HalfCarry, v == 0b10000);
+                v = v.wrapping_sub(1);
+                self.registers.set_flag(Flag::Zero, v == 0);
+                self.registers.set_flag(Flag::Sub, true);
+                self.memory
+                    .write_byte(self.registers.combined_register(target), v);
                 return;
             }
             _ => {
@@ -573,8 +568,16 @@ impl Cpu {
             Target::F => v = &mut self.registers.f,
             Target::L => v = &mut self.registers.l,
             Target::H => v = &mut self.registers.h,
-            Target::BC | Target::DE | Target::HL | Target::SP => {
-                self.inc_16(target);
+            Target::HL => {
+                let mut v = self
+                    .memory
+                    .read_byte(self.registers.combined_register(target));
+                self.registers.set_flag(Flag::HalfCarry, v == 0b1111);
+                v = v.wrapping_add(1);
+                self.registers.set_flag(Flag::Zero, v == 0);
+                self.registers.set_flag(Flag::Sub, false);
+                self.memory
+                    .write_byte(self.registers.combined_register(target), v);
                 return;
             }
             _ => {
@@ -1347,7 +1350,7 @@ fn test_cpl() {
     let mut cpu = Cpu::new();
 
     cpu.registers.a = 1;
-    cpu.cpl(Target::A);
+    cpu.cpl();
     assert!(cpu.registers.a == 0b11111110);
 }
 
