@@ -252,7 +252,7 @@ impl Registers {
 
     pub fn is_16bit_target(&self, reg: Target) -> bool {
         match reg {
-            Target::SP | Target::SpR8 | Target::D16 => return true,
+            Target::SP | Target::SP_R8 | Target::D16 => return true,
             _ => return false,
         }
     }

@@ -62,7 +62,7 @@ impl Cpu {
             registers: Registers::new(),
             memory: Memory::new(),
             pc: 0,
-            sp: 0,
+            sp: 0x99, // Check what value the stack pointer is initialised to
             addr: 0,
             is_prefixed: false,
             interrupts_enabled: true,
@@ -115,6 +115,7 @@ impl Cpu {
 
     pub fn execute(&mut self, instruction: &Instruction) -> u16 {
         let mut pc_increment = instruction.length as u16;
+        let mut cycles = instruction.cycles;
 
         match instruction.opcode.to_owned() {
             OpCode::ADC(target) => {
@@ -132,10 +133,19 @@ impl Cpu {
             OpCode::BIT(bit, target) => {
                 self.bit(bit, target);
             }
-            OpCode::CALL(flag) => match flag {
-                Flag::Zero => if self.registers.get_flag(flag) {},
-                _ => {}
-            },
+            OpCode::CALL(flag) => {
+                if self.call(flag) {
+                    pc_increment = 0;
+                }
+            }
+            OpCode::CALL_UC => {
+                if self.registers.get_flag(Flag::Zero) {
+                    self.call(Flag::Zero);
+                } else {
+                    self.call(Flag::NotZero);
+                }
+                pc_increment = 0;
+            }
             OpCode::CCF => {
                 self.registers
                     .set_flag(Flag::Carry, !self.registers.get_flag(Flag::Zero));
@@ -160,13 +170,24 @@ impl Cpu {
                 self.inc(target);
             }
             OpCode::JUMP(flag) => {
-                let value = self.memory.read_byte(self.pc + 1);
-                if self.jump_by_flag(flag, value as u16) {
+                if self.jump_by_flag(flag) {
                     pc_increment = 0;
+                } else {
+                    cycles = instruction.optional_cycles;
                 }
             }
-            OpCode::JumpUnconditional => {
-                self.jump(self.addr);
+            OpCode::JP => {
+                self.jump();
+            }
+            OpCode::JR(flag) => {
+                self.jr(flag);
+            }
+            OpCode::JRUC => {
+                if self.registers.get_flag(Flag::Zero) {
+                    self.jr(Flag::Zero);
+                } else {
+                    self.jr(Flag::NotZero);
+                }
             }
             OpCode::LD(dst, src) => {
                 if self.registers.is_16bit_target(dst) || self.registers.is_16bit_target(src) {
@@ -184,6 +205,56 @@ impl Cpu {
             }
             OpCode::RES(bit, target) => {
                 self.res(bit, target);
+            }
+            OpCode::RET(flag) => {
+                if self.ret(flag) {
+                    pc_increment = 0;
+                }
+            }
+            OpCode::RET_UC => {
+                if self.registers.get_flag(Flag::Zero) {
+                    self.ret(Flag::Zero);
+                } else {
+                    self.ret(Flag::NotZero);
+                }
+                pc_increment = 0;
+            }
+            OpCode::RETI => {
+                if self.registers.get_flag(Flag::Zero) {
+                    self.ret(Flag::Zero);
+                } else {
+                    self.ret(Flag::NotZero);
+                }
+                pc_increment = 0;
+                self.interrupts_enabled = true;
+            }
+            OpCode::RL(target) => {
+                self.rl(target);
+            }
+            OpCode::RLA => {
+                self.rla();
+            }
+            OpCode::RLC(target) => {
+                self.rlc(target);
+            }
+            OpCode::RLCA => {
+                self.rlca();
+            }
+            OpCode::RR(target) => {
+                self.rr(target);
+            }
+            OpCode::RRA => {
+                self.rra();
+            }
+            OpCode::RRC(target) => {
+                self.rrc(target);
+            }
+            OpCode::RRCA => {
+                self.rrca();
+            }
+            OpCode::RST(address) => {
+                self.rst(address);
+                pc_increment = 0;
             }
             OpCode::SBC(target) => {
                 self.sbc(target);
@@ -213,7 +284,7 @@ impl Cpu {
                 self.sla(target);
             }
             OpCode::SRL(target) => {
-                self.sr(target);
+                self.srl(target);
             }
             OpCode::SRA(target) => {
                 self.sra(target);
@@ -382,10 +453,28 @@ impl Cpu {
         }
         let bit = v & (1 << bit);
 
-        self.registers.set_flag(Flag::Zero, bit != 0);
+        self.registers.set_flag(Flag::Zero, bit == 0);
         self.registers.set_flag(Flag::Carry, false);
         self.registers.set_flag(Flag::HalfCarry, true);
         self.registers.set_flag(Flag::Sub, false);
+    }
+
+    fn call(&mut self, flag: Flag) -> bool {
+        if self.registers.get_flag(flag) {
+            self.memory
+                .write_byte(self.sp + 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
+            self.memory
+                .write_byte(self.sp, (self.pc & 0b11111111) as u8);
+
+            self.sp = self.sp.wrapping_add(2);
+
+            self.pc = ((self.memory.read_byte(self.pc + 2) as u16) << 8)
+                | self.memory.read_byte(self.pc + 1) as u16;
+
+            return true;
+        }
+
+        false
     }
 
     fn cp(&mut self, reg: Target) {
@@ -515,15 +604,25 @@ impl Cpu {
         );
     }
 
-    fn jump(&mut self, address: u16) {
-        self.pc = address;
+    fn jump(&mut self) {
+        self.pc = self.registers.combined_register(Target::HL);
     }
 
-    fn jump_by_flag(&mut self, flag: Flag, address: u16) -> bool {
+    fn jump_by_flag(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = address;
+            self.pc = ((self.memory.read_byte(self.pc + 2) as u16) << 8)
+                | self.memory.read_byte(self.pc + 1) as u16;
             return true;
         }
+        false
+    }
+
+    fn jr(&mut self, flag: Flag) -> bool {
+        if self.registers.get_flag(flag) {
+            self.pc = (self.pc as i16 + (self.memory.read_byte(self.pc + 1) as i8) as i16) as u16;
+            return true;
+        }
+
         false
     }
 
@@ -637,7 +736,7 @@ impl Cpu {
                     + self.memory.read_byte(self.pc + 2) as u16) as u16;
             },
             Target::SP => v = &mut self.sp,
-            Target::SpR8 => {
+            Target::SP_R8 => {
                 v = &mut (self
                     .memory
                     .read_byte(self.sp + self.memory.read_byte(self.pc + 1) as u16)
@@ -682,7 +781,7 @@ impl Cpu {
                     + self.memory.read_byte(self.pc + 2) as u16) as u16;
             },
             Target::SP => d = &mut self.sp,
-            Target::SpR8 => {
+            Target::SP_R8 => {
                 d = &mut (self
                     .memory
                     .read_byte(self.sp + self.memory.read_byte(self.pc + 1) as u16)
@@ -743,6 +842,49 @@ impl Cpu {
         }
     }
 
+    fn ret(&mut self, flag: Flag) -> bool {
+        if self.registers.get_flag(flag) {
+            self.pc = ((self.memory.read_byte(self.sp - 2) as u16) << 8)
+                | (self.memory.read_byte(self.sp - 1) as u16);
+            self.sp = self.sp - 2;
+
+            return true;
+        }
+        false
+    }
+
+    fn rla(&mut self) {
+        let msb = (self.registers.a & (1 << ZERO_BIT_POS)) >> ZERO_BIT_POS;
+        let carry = self.registers.filter_flag(Flag::Carry);
+        self.registers.a = self.registers.a << 1 | carry;
+        self.registers.set_flag(Flag::Carry, msb != 0);
+        self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+    }
+
+    fn rlca(&mut self) {
+        self.registers
+            .set_flag(Flag::Carry, (self.registers.a & (1 << ZERO_BIT_POS)) != 0);
+        self.registers.a = self.registers.a.rotate_left(1);
+
+        self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+    }
+
+    fn rra(&mut self) {
+        let lsb = self.registers.a & 1;
+        let carry = self.registers.filter_flag(Flag::Carry) << ZERO_BIT_POS;
+        self.registers.a = self.registers.a >> 1 | carry;
+        self.registers.set_flag(Flag::Carry, lsb != 0);
+        self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+    }
+
+    fn rrca(&mut self) {
+        self.registers
+            .set_flag(Flag::Carry, (self.registers.a & 1) != 0);
+        self.registers.a = self.registers.a.rotate_right(1);
+
+        self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+    }
+
     fn rl(&mut self, reg: Target) {
         match reg {
             Target::A => self.registers.a = self.registers.a.rotate_left(1),
@@ -770,17 +912,22 @@ impl Cpu {
             Target::F => v = &mut self.registers.f,
             Target::H => v = &mut self.registers.h,
             Target::L => v = &mut self.registers.l,
+            Target::HL => {
+                let v = self.registers.combined_register(reg);
+                self.registers.set_flag(Flag::Carry, (v & (1 << 15)) != 0);
+                self.registers.set_combined_register(reg, v.rotate_left(1));
+                return;
+            }
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RLC(reg)));
             }
         }
 
         unsafe {
-            let bit: u8 = (*v) & 0b10000000;
-            *v = (*v) << 1;
-            let flag_bit = self.registers.filter_flag(Flag::Carry);
-            *v = (*v) | flag_bit;
-            self.registers.set_flag_from_u8(Flag::Carry, bit);
+            self.registers
+                .set_flag(Flag::Carry, (*v & (1 << ZERO_BIT_POS)) != 0);
+            *v = (*v).rotate_left(1);
+            self.registers.set_flag(Flag::Zero, *v == 0);
         }
     }
 
@@ -818,12 +965,21 @@ impl Cpu {
         }
 
         unsafe {
-            let bit: u8 = (*v) & 1;
-            *v = (*v) >> 1;
-            let flag_bit = self.registers.filter_flag(Flag::Carry);
-            *v = (*v) | (flag_bit << ZERO_BIT_POS);
-            self.registers.set_flag_from_u8(Flag::Carry, bit);
+            self.registers.set_flag(Flag::Carry, (*v & 1) != 0);
+            *v = (*v).rotate_right(1);
+            self.registers.set_flag(Flag::Zero, *v == 0);
         }
+    }
+
+    fn rst(&mut self, address: u16) {
+        self.memory
+            .write_byte(self.sp + 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
+        self.memory
+            .write_byte(self.sp, (self.pc & 0b11111111) as u8);
+
+        self.sp = self.sp.wrapping_add(2);
+
+        self.pc = address;
     }
 
     fn sbc(&mut self, reg: Target) {
@@ -915,24 +1071,38 @@ impl Cpu {
         }
 
         unsafe {
-            let bit = (*v) & 1;
-            *v = ((*v) << 1) | bit;
+            let bit = (*v) & (1 << ZERO_BIT_POS);
+            self.registers.set_flag(Flag::Carry, bit == 0);
+            *v = (*v) << 1;
+            self.registers.set_flag(Flag::Zero, *v == 0);
+            self.registers.set_flag(Flag::HalfCarry, false);
+            self.registers.set_flag(Flag::Sub, false);
         }
     }
 
-    fn sr(&mut self, reg: Target) {
+    fn srl(&mut self, reg: Target) {
+        let mut v: *mut u8 = ptr::null_mut();
         match reg {
-            Target::A => self.registers.a = self.registers.a >> 1,
-            Target::B => self.registers.b = self.registers.b >> 1,
-            Target::C => self.registers.c = self.registers.c >> 1,
-            Target::D => self.registers.d = self.registers.d >> 1,
-            Target::E => self.registers.e = self.registers.e >> 1,
-            Target::F => self.registers.f = self.registers.f >> 1,
-            Target::H => self.registers.h = self.registers.h >> 1,
-            Target::L => self.registers.l = self.registers.l >> 1,
+            Target::A => v = &mut self.registers.a,
+            Target::B => v = &mut self.registers.b,
+            Target::C => v = &mut self.registers.c,
+            Target::D => v = &mut self.registers.d,
+            Target::E => v = &mut self.registers.e,
+            Target::F => v = &mut self.registers.f,
+            Target::H => v = &mut self.registers.h,
+            Target::L => v = &mut self.registers.l,
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SRL(reg)));
             }
+        }
+
+        unsafe {
+            let lsb = (*v) & 1;
+            *v = *v >> 1;
+            self.registers.set_flag(Flag::Zero, *v == 0);
+            self.registers.set_flag(Flag::Sub, false);
+            self.registers.set_flag(Flag::Carry, lsb != 0);
+            self.registers.set_flag(Flag::HalfCarry, false);
         }
     }
 
@@ -954,8 +1124,13 @@ impl Cpu {
         }
 
         unsafe {
-            let bit = (*v) & (1 << ZERO_BIT_POS);
-            *v = ((*v) >> 1) | bit;
+            let lsb = (*v) & 1;
+            let msb = (*v) & (1 << ZERO_BIT_POS);
+            *v = ((*v) >> 1) | msb;
+            self.registers.set_flag(Flag::Zero, *v == 0);
+            self.registers.set_flag(Flag::Sub, false);
+            self.registers.set_flag(Flag::Carry, lsb != 0);
+            self.registers.set_flag(Flag::HalfCarry, false);
         }
     }
 
@@ -1063,7 +1238,7 @@ impl Cpu {
 
     pub fn reset_registers(&mut self) {
         self.pc = 0;
-        self.sp = 1;
+        self.sp = 0x99;
         self.registers.reset();
     }
 }
@@ -1135,10 +1310,36 @@ fn test_bit() {
     cpu.registers.a = 0b10000000;
     cpu.bit(7, Target::A);
 
+    assert!(!cpu.registers.get_flag(Flag::Zero));
+    assert!(!cpu.registers.get_flag(Flag::Sub));
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(cpu.registers.get_flag(Flag::HalfCarry));
+
+    cpu.registers.a = 0;
+    cpu.bit(7, Target::A);
+
     assert!(cpu.registers.get_flag(Flag::Zero));
     assert!(!cpu.registers.get_flag(Flag::Sub));
     assert!(!cpu.registers.get_flag(Flag::Carry));
     assert!(cpu.registers.get_flag(Flag::HalfCarry));
+}
+
+#[test]
+fn test_call_and_ret() {
+    let mut cpu = Cpu::new();
+
+    cpu.write_to_memory(1, 10);
+    cpu.write_to_memory(2, 0);
+    cpu.memory.write_byte(11, 0);
+    cpu.memory.write_byte(12, 0);
+
+    assert!(cpu.call(Flag::NotZero));
+
+    assert!(cpu.pc == 10);
+
+    assert!(cpu.ret(Flag::NotZero));
+
+    assert!(cpu.pc == 0);
 }
 
 #[test]
@@ -1202,12 +1403,101 @@ fn test_inc_16() {
 fn test_jump() {
     let mut cpu = Cpu::new();
 
+    cpu.registers.set_combined_register(Target::HL, 100);
+    cpu.jump();
+
+    assert!(cpu.pc == 100);
+}
+
+#[test]
+fn test_jump_by_flag() {
+    let mut cpu = Cpu::new();
+
+    cpu.zero_memory();
+
+    cpu.registers.a = 5;
+    cpu.registers.b = 5;
+    cpu.memory.write_byte(1, 255);
+    cpu.memory.write_byte(2, 0);
+    cpu.sub(Target::B);
+    cpu.jump_by_flag(Flag::Zero);
+
+    eprintln!("pc = {}", cpu.pc);
+    assert!(cpu.pc == 255);
+    cpu.registers.reset();
+
+    cpu.registers.b = 5;
+    cpu.memory.write_byte(256, 0);
+    cpu.memory.write_byte(257, 0);
+    cpu.add(Target::B);
+    cpu.jump_by_flag(Flag::NotZero);
+
+    assert!(cpu.pc == 0);
+    cpu.registers.reset();
+
+    cpu.registers.a = 200;
+    cpu.registers.b = 100;
+    cpu.memory.write_byte(1, 255);
+    cpu.memory.write_byte(2, 0);
+    cpu.add(Target::B);
+
+    cpu.jump_by_flag(Flag::Carry);
+
+    assert!(cpu.pc == 255);
+    cpu.registers.reset();
+
+    cpu.registers.b = 100;
+    cpu.memory.write_byte(256, 0);
+    cpu.memory.write_byte(257, 0);
+    cpu.add(Target::B);
+
+    cpu.jump_by_flag(Flag::NotCarry);
+
+    assert!(cpu.pc == 0);
+    cpu.registers.reset();
+}
+
+#[test]
+fn test_jr() {
+    let mut cpu = Cpu::new();
+
+    cpu.write_to_memory(1, 100);
     cpu.registers.a = 5;
     cpu.registers.b = 5;
     cpu.sub(Target::B);
-    cpu.jump_by_flag(Flag::Zero, 255);
 
-    assert!(cpu.pc == 255);
+    cpu.jr(Flag::Zero);
+
+    assert!(cpu.pc == 100);
+    cpu.registers.reset();
+
+    cpu.write_to_memory(101, 5);
+    cpu.registers.b = 5;
+    cpu.add(Target::B);
+
+    cpu.jr(Flag::NotZero);
+
+    assert!(cpu.pc == 105);
+    cpu.registers.reset();
+
+    cpu.memory.write_byte(106, 0b11111011);
+    cpu.registers.a = 255;
+    cpu.registers.b = 20;
+    cpu.add(Target::B);
+
+    cpu.jr(Flag::Carry);
+
+    assert!(cpu.pc == 100);
+    cpu.registers.reset();
+
+    cpu.registers.a = 100;
+    cpu.registers.b = 20;
+    cpu.add(Target::B);
+
+    cpu.jr(Flag::NotCarry);
+
+    assert!(cpu.pc == 105);
+    cpu.registers.reset();
 }
 
 #[test]
@@ -1300,20 +1590,36 @@ fn test_rl() {
 }
 
 #[test]
+fn test_rla() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 0b10000000;
+    cpu.rla();
+
+    assert!(cpu.registers.get_flag(Flag::Carry));
+    assert!(cpu.registers.a == 0);
+
+    cpu.rla();
+
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(cpu.registers.a == 1);
+}
+
+#[test]
 fn test_rlc() {
     let mut cpu = Cpu::new();
 
     cpu.registers.set_flag(Flag::Carry, true);
-    cpu.registers.a = 0;
+    cpu.registers.a = 1;
     cpu.rlc(Target::A);
 
-    assert!(cpu.registers.a == 1);
+    assert!(cpu.registers.a == 2);
     assert!(!cpu.registers.get_flag(Flag::Carry));
 
     cpu.registers.a = 0b10000000;
     cpu.rlc(Target::A);
 
-    assert!(cpu.registers.a == 0);
+    assert!(cpu.registers.a == 1);
     assert!(cpu.registers.get_flag(Flag::Carry));
 }
 
@@ -1333,21 +1639,47 @@ fn test_rr() {
 }
 
 #[test]
+fn test_rra() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 1;
+    cpu.rra();
+
+    assert!(cpu.registers.get_flag(Flag::Carry));
+    assert!(cpu.registers.a == 0);
+
+    cpu.rra();
+
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(cpu.registers.a == 0b10000000);
+}
+
+#[test]
 fn test_rrc() {
     let mut cpu = Cpu::new();
 
     cpu.registers.set_flag(Flag::Carry, true);
-    cpu.registers.a = 0;
-    cpu.rrc(Target::A);
-
-    assert!(cpu.registers.a == 0b10000000);
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-
     cpu.registers.a = 1;
     cpu.rrc(Target::A);
 
-    assert!(cpu.registers.a == 0);
+    assert!(cpu.registers.a == 0b10000000);
     assert!(cpu.registers.get_flag(Flag::Carry));
+
+    cpu.rrc(Target::A);
+
+    assert!(cpu.registers.a == 0b01000000);
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+}
+
+#[test]
+fn test_rrca() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers.a = 1;
+    cpu.rrca();
+
+    assert!(cpu.registers.get_flag(Flag::Carry));
+    assert!(cpu.registers.a == (1 << ZERO_BIT_POS));
 }
 
 #[test]
@@ -1397,7 +1729,7 @@ fn test_sla() {
     cpu.registers.a = 1;
     cpu.sla(Target::A);
 
-    assert!(cpu.registers.a == 3);
+    assert!(cpu.registers.a == 2);
 }
 
 #[test]
@@ -1405,11 +1737,11 @@ fn test_sr() {
     let mut cpu = Cpu::new();
 
     cpu.registers.a = 2;
-    cpu.sr(Target::A);
+    cpu.srl(Target::A);
 
     assert!(cpu.registers.a == 1);
 
-    cpu.sr(Target::A);
+    cpu.srl(Target::A);
 
     assert!(cpu.registers.a == 0);
 }
