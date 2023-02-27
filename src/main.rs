@@ -42,9 +42,13 @@ macro_rules! _assert {
     };
 }
 
-static CHECK_INSTRUCTION_DEFINITION_COMPLETENES: bool = true;
-static PRINT_OPCODES: bool = false;
-static CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES: bool = false;
+static CHECK_INSTRUCTION_DEFINITION_COMPLETENES: i32 = 0b0001;
+static PRINT_OPCODES: i32 = 0b0010;
+static CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES: i32 = 0b0100;
+static RUN_PROGRAM: i32 = 0b1000;
+
+static RUN_FLAG: i32 =
+    CHECK_INSTRUCTION_DEFINITION_COMPLETENES | CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES;
 
 fn read_program_file(path: String, cpu: &mut Cpu) {
     let code = fs::read(path).expect("Failed to read file");
@@ -77,9 +81,9 @@ fn write_program_file(path: String) {
 }
 
 fn main() {
-    if CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES {
+    let mut cpu = Cpu::new();
+    if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
         // env::set_var("RUST_BACKTRACE", "1");
-        let mut cpu = Cpu::new();
         cpu.zero_memory();
 
         for i in 0..=0xFF {
@@ -95,28 +99,26 @@ fn main() {
         //     cpu.execute(&i.1);
         //     cpu.reset_registers();
         // }
-        return;
     }
 
-    if CHECK_INSTRUCTION_DEFINITION_COMPLETENES {
+    if RUN_FLAG & CHECK_INSTRUCTION_DEFINITION_COMPLETENES != 0 {
         Instruction::test_instruction_completeness();
-        return;
     }
 
-    if PRINT_OPCODES {
+    if RUN_FLAG & PRINT_OPCODES != 0 {
         Instruction::print_instruction_bytes_as_char();
     }
 
-    let mut cpu = Cpu::new();
+    if RUN_FLAG & RUN_PROGRAM != 0 {
+        // write_program(&mut cpu);
+        // write_program_file("program.bin".to_string());
+        read_program_file("program.bin".to_string(), &mut cpu);
 
-    // write_program(&mut cpu);
-    // write_program_file("program.bin".to_string());
-    read_program_file("program.bin".to_string(), &mut cpu);
+        cpu.run();
 
-    cpu.run();
+        cpu.print_registers();
 
-    cpu.print_registers();
-
-    println!("a = {}", cpu.get_reg_a());
-    _assert_eq!(cpu.get_reg_a(), 0b10000001);
+        println!("a = {}", cpu.get_reg_a());
+        _assert_eq!(cpu.get_reg_a(), 0b10000001);
+    }
 }

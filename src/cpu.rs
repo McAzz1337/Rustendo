@@ -12,12 +12,13 @@ use crate::OpCode;
 use crate::Registers;
 
 use crate::CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES;
+use crate::RUN_FLAG;
 
 use std::ptr;
 
 macro_rules! panic_or_print {
     ($a: expr) => {
-        if CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES {
+        if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
             println!($a);
             return;
         } else {
@@ -26,7 +27,7 @@ macro_rules! panic_or_print {
     };
 
     ($a: expr, $b: expr) => {
-        if CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES {
+        if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
             println!($a, $b);
             return;
         } else {
@@ -35,7 +36,7 @@ macro_rules! panic_or_print {
     };
 
     ($a: expr, $b: expr, $c: expr) => {
-        if CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES {
+        if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
             println!($a, $b, $c);
             return;
         } else {
@@ -62,8 +63,8 @@ impl Cpu {
         Cpu {
             registers: Registers::new(),
             memory: Memory::new(),
-            pc: 0,
-            sp: 0x99, // Check what value the stack pointer is initialised to
+            pc: 0x100,
+            sp: 0xE000, // Check what value the stack pointer is initialised to
             addr: 0,
             is_prefixed: false,
             interrupts_enabled: true,
@@ -158,6 +159,9 @@ impl Cpu {
             OpCode::CPL => {
                 self.cpl();
             }
+            OpCode::DDA => {
+                self.dda();
+            }
             OpCode::DEC(target) => {
                 self.dec(target);
             }
@@ -190,6 +194,9 @@ impl Cpu {
             OpCode::JR(flag) => {
                 self.jr(flag);
             }
+            OpCode::JP_HL => {
+                self.jump_hl();
+            }
             OpCode::JRUC => {
                 if self.registers.get_flag(Flag::Zero) {
                     self.jr(Flag::Zero);
@@ -207,6 +214,12 @@ impl Cpu {
             OpCode::NOP => {}
             OpCode::OR(target) => {
                 self.or(target);
+            }
+            OpCode::POP(target) => {
+                self.pop(target);
+            }
+            OpCode::PUSH(target) => {
+                self.push(target);
             }
             OpCode::CB => {
                 self.is_prefixed = true;
@@ -295,7 +308,7 @@ impl Cpu {
                 self.xor(target);
             }
             _ => {
-                if CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES {
+                if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
                     println!(
                         "Unimplemented {:#?} : {:#x}",
                         instruction.opcode,
@@ -321,6 +334,7 @@ impl Cpu {
             Target::H => v = self.registers.h as u16,
             Target::L => v = self.registers.l as u16,
             Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
+            Target::D8 => v = self.memory.read_byte(self.pc + 1) as u16,
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::ADC(reg)));
             }
@@ -461,11 +475,11 @@ impl Cpu {
     fn call(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
             self.memory
-                .write_byte(self.sp + 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
+                .write_byte(self.sp - 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
             self.memory
                 .write_byte(self.sp, (self.pc & 0b11111111) as u8);
 
-            self.sp = self.sp.wrapping_add(2);
+            self.sp = self.sp.wrapping_sub(2);
 
             self.pc = ((self.memory.read_byte(self.pc + 2) as u16) << 8)
                 | self.memory.read_byte(self.pc + 1) as u16;
@@ -487,7 +501,7 @@ impl Cpu {
             Target::H => v = self.registers.h as u16,
             Target::L => v = self.registers.l as u16,
             Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
-            Target::R8 => v = self.memory.read_byte(self.pc + 1) as u16,
+            Target::D8 => v = self.memory.read_byte(self.pc + 1) as u16,
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::CP(reg)));
             }
@@ -505,6 +519,24 @@ impl Cpu {
 
     fn cpl(&mut self) {
         self.registers.a = !self.registers.a;
+    }
+
+    fn dda(&mut self) {
+        let mut correction: u8 = 0;
+        let carry_flag = self.registers.get_flag(Flag::HalfCarry);
+
+        if carry_flag || (self.registers.a & 0x0F) > 9 {
+            correction |= 0x06;
+        }
+
+        if carry_flag || self.registers.a > 0x9F {
+            correction |= 0x60;
+            self.registers.set_flag(Flag::Carry, true);
+        }
+
+        self.registers.a = (self.registers.a).wrapping_add(correction);
+        self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+        self.registers.set_flag(Flag::HalfCarry, false);
     }
 
     fn dec(&mut self, target: Target) {
@@ -627,6 +659,10 @@ impl Cpu {
         }
 
         false
+    }
+
+    fn jump_hl(&mut self) {
+        self.pc = self.registers.combined_register(Target::HL);
     }
 
     #[allow(unused_assignments)]
@@ -823,6 +859,40 @@ impl Cpu {
         }
     }
 
+    fn pop(&mut self, target: Target) {
+        let v = ((self.memory.read_byte(self.sp + 1) as u16) << 8)
+            | self.memory.read_byte(self.sp + 2) as u16;
+
+        self.sp = self.sp.wrapping_add(2);
+
+        match target {
+            Target::AF | Target::BC | Target::DE | Target::HL => {
+                self.registers.set_combined_register(target, v)
+            }
+            _ => {
+                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::POP(target)));
+            }
+        }
+    }
+
+    fn push(&mut self, target: Target) {
+        let v;
+        match target {
+            Target::AF | Target::BC | Target::DE | Target::HL => {
+                v = self.registers.combined_register(target)
+            }
+            _ => {
+                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::PUSH(target)));
+            }
+        }
+
+        self.memory.write_byte(self.sp, (v & 0b11111111) as u8);
+        self.memory
+            .write_byte(self.sp - 1, ((v & 0b1111111100000000) >> 8) as u8);
+
+        self.sp = self.sp.wrapping_sub(2);
+    }
+
     fn res(&mut self, bit: u8, reg: Target) {
         let mut v: *mut u8 = ptr::null_mut();
         match reg {
@@ -847,9 +917,9 @@ impl Cpu {
 
     fn ret(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = ((self.memory.read_byte(self.sp - 2) as u16) << 8)
-                | (self.memory.read_byte(self.sp - 1) as u16);
-            self.sp = self.sp - 2;
+            self.pc = ((self.memory.read_byte(self.sp + 1) as u16) << 8)
+                | (self.memory.read_byte(self.sp + 2) as u16);
+            self.sp = self.sp.wrapping_add(2);
 
             return true;
         }
@@ -976,11 +1046,11 @@ impl Cpu {
 
     fn rst(&mut self, address: u16) {
         self.memory
-            .write_byte(self.sp + 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
+            .write_byte(self.sp - 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
         self.memory
             .write_byte(self.sp, (self.pc & 0b11111111) as u8);
 
-        self.sp = self.sp.wrapping_add(2);
+        self.sp = self.sp.wrapping_sub(2);
 
         self.pc = address;
     }
@@ -996,7 +1066,7 @@ impl Cpu {
             Target::H => v = self.registers.h as u16,
             Target::L => v = self.registers.l as u16,
             Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
-            Target::R8 => v = self.memory.read_byte(self.pc + 1) as u16,
+            Target::D8 => v = self.memory.read_byte(self.pc + 1) as u16,
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SBC(reg)));
             }
@@ -1216,6 +1286,7 @@ impl Cpu {
                 self.registers.a =
                     self.registers.a ^ self.memory.read_byte(self.registers.combined_register(src))
             }
+            Target::D8 => self.registers.a = self.registers.a ^ self.memory.read_byte(self.pc + 1),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::XOR(src)));
             }
@@ -1240,8 +1311,8 @@ impl Cpu {
     }
 
     pub fn reset_registers(&mut self) {
-        self.pc = 0;
-        self.sp = 0x99;
+        self.pc = 0x100;
+        self.sp = 0xE000;
         self.registers.reset();
     }
 }
@@ -1331,18 +1402,22 @@ fn test_bit() {
 fn test_call_and_ret() {
     let mut cpu = Cpu::new();
 
-    cpu.write_to_memory(1, 10);
-    cpu.write_to_memory(2, 0);
-    cpu.memory.write_byte(11, 0);
-    cpu.memory.write_byte(12, 0);
+    eprintln!("pc = {}", cpu.pc);
+    let address1 = cpu.pc + 10;
+    let address2 = cpu.pc;
 
+    cpu.memory
+        .write_byte(cpu.pc + 1, (address1 & 0b11111111) as u8);
+    cpu.memory
+        .write_byte(cpu.pc + 2, ((address1 & 0b1111111100000000) >> 8) as u8);
     assert!(cpu.call(Flag::NotZero));
 
-    assert!(cpu.pc == 10);
+    assert!(cpu.pc == address1);
 
     assert!(cpu.ret(Flag::NotZero));
 
-    assert!(cpu.pc == 0);
+    eprintln!("pc = {}", cpu.pc);
+    assert!(cpu.pc == address2);
 }
 
 #[test]
@@ -1413,104 +1488,120 @@ fn test_jump() {
 }
 
 #[test]
+fn test_jump_hl() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers
+        .set_combined_register(Target::HL, 0b0000001010001000);
+
+    cpu.jump_hl();
+
+    assert!(cpu.pc == 0b0000001010001000);
+}
+
+#[test]
 fn test_jump_by_flag() {
     let mut cpu = Cpu::new();
 
     cpu.zero_memory();
 
+    let mut initial = cpu.pc as u8;
+
     cpu.registers.a = 5;
     cpu.registers.b = 5;
-    cpu.memory.write_byte(1, 255);
-    cpu.memory.write_byte(2, 0);
+    cpu.memory.write_byte(cpu.pc + 1, initial + 255);
+    cpu.memory.write_byte(cpu.pc + 2, initial + 0);
     cpu.sub(Target::B);
     cpu.jump_by_flag(Flag::Zero);
 
-    eprintln!("pc = {}", cpu.pc);
-    assert!(cpu.pc == 255);
-    cpu.registers.reset();
+    assert!(cpu.pc as u8 == initial + 255);
+    cpu.reset_registers();
 
     cpu.registers.b = 5;
-    cpu.memory.write_byte(256, 0);
-    cpu.memory.write_byte(257, 0);
+    cpu.memory.write_byte(cpu.pc + 1, 0);
+    cpu.memory.write_byte(cpu.pc + 2, 0);
     cpu.add(Target::B);
     cpu.jump_by_flag(Flag::NotZero);
 
     assert!(cpu.pc == 0);
-    cpu.registers.reset();
+    cpu.reset_registers();
 
     cpu.registers.a = 200;
     cpu.registers.b = 100;
-    cpu.memory.write_byte(1, 255);
-    cpu.memory.write_byte(2, 0);
+    cpu.memory.write_byte(cpu.pc + 1, initial + 255);
+    cpu.memory.write_byte(cpu.pc + 2, initial + 0);
     cpu.add(Target::B);
 
     cpu.jump_by_flag(Flag::Carry);
 
-    assert!(cpu.pc == 255);
-    cpu.registers.reset();
+    assert!(cpu.pc as u8 == initial + 255);
+    cpu.reset_registers();
 
     cpu.registers.b = 100;
-    cpu.memory.write_byte(256, 0);
-    cpu.memory.write_byte(257, 0);
+    cpu.memory.write_byte(cpu.pc + 1, 0);
+    cpu.memory.write_byte(cpu.pc + 2, 0);
     cpu.add(Target::B);
 
     cpu.jump_by_flag(Flag::NotCarry);
 
     assert!(cpu.pc == 0);
-    cpu.registers.reset();
 }
 
 #[test]
 fn test_jr() {
     let mut cpu = Cpu::new();
 
-    cpu.write_to_memory(1, 100);
+    let mut initial = cpu.pc as u8;
+    cpu.write_to_memory(cpu.pc + 1, initial + 100);
     cpu.registers.a = 5;
     cpu.registers.b = 5;
     cpu.sub(Target::B);
 
     cpu.jr(Flag::Zero);
 
-    assert!(cpu.pc == 100);
-    cpu.registers.reset();
+    assert!(cpu.pc as u8 == initial + 100);
+    cpu.reset_registers();
+    initial = cpu.pc as u8;
 
-    cpu.write_to_memory(101, 5);
+    cpu.write_to_memory(cpu.pc + 1, initial + 5);
     cpu.registers.b = 5;
     cpu.add(Target::B);
 
     cpu.jr(Flag::NotZero);
 
-    assert!(cpu.pc == 105);
-    cpu.registers.reset();
+    assert!(cpu.pc as u8 == initial + 5);
+    cpu.reset_registers();
+    initial = cpu.pc as u8;
 
-    cpu.memory.write_byte(106, 0b11111011);
+    cpu.memory.write_byte(cpu.pc + 1, initial + 100);
     cpu.registers.a = 255;
     cpu.registers.b = 20;
     cpu.add(Target::B);
 
     cpu.jr(Flag::Carry);
 
-    assert!(cpu.pc == 100);
-    cpu.registers.reset();
+    assert!(cpu.pc as u8 == initial + 100);
+    cpu.reset_registers();
+    initial = cpu.pc as u8;
 
+    cpu.memory.write_byte(cpu.pc + 1, initial + 105);
     cpu.registers.a = 100;
     cpu.registers.b = 20;
     cpu.add(Target::B);
 
     cpu.jr(Flag::NotCarry);
 
-    assert!(cpu.pc == 105);
-    cpu.registers.reset();
+    assert!(cpu.pc as u8 == initial + 105);
 }
 
 #[test]
 fn test_load() {
     let mut cpu = Cpu::new();
     cpu.write_to_memory(
-        0,
+        cpu.pc,
         Instruction::byte_from_opcode(OpCode::LD(Target::A, Target::D8)).unwrap(),
     );
-    cpu.write_to_memory(1, 100);
+    cpu.write_to_memory(cpu.pc + 1, 100);
     cpu.tick();
     cpu.tick();
     assert!(cpu.registers.a == 100);
@@ -1525,6 +1616,23 @@ fn test_or() {
     cpu.or(Target::B);
 
     assert!(cpu.registers.a == 7);
+}
+
+#[test]
+fn test_push_and_pop() {
+    let mut cpu = Cpu::new();
+
+    cpu.registers
+        .set_combined_register(Target::HL, 0b1000100000010001);
+
+    cpu.push(Target::HL);
+
+    assert!(cpu.memory.read_byte(cpu.sp + 1) == 0b10001000);
+    assert!(cpu.memory.read_byte(cpu.sp + 2) == 0b00010001);
+
+    cpu.pop(Target::BC);
+
+    assert!(cpu.registers.combined_register(Target::BC) == 0b1000100000010001);
 }
 
 #[test]

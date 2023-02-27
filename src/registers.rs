@@ -181,6 +181,7 @@ impl Registers {
             Target::HL => ((self.h as u16) << 8) | self.l as u16,
             Target::BC => ((self.b as u16) << 8) | self.c as u16,
             Target::DE => ((self.d as u16) << 8) | self.e as u16,
+            Target::AF => ((self.a as u16) << 8) | self.f as u16,
             _ => {
                 panic!("Unimplemented {:#?}", reg);
             }
@@ -200,6 +201,10 @@ impl Registers {
             Target::DE => {
                 self.d = ((v & 0b1111111100000000) >> 8) as u8;
                 self.e = (v & 0b11111111) as u8;
+            }
+            Target::AF => {
+                self.a = ((v & 0b1111111100000000) >> 8) as u8;
+                self.f = (v & 0b11111111) as u8;
             }
             _ => {
                 panic!("Unimplemented {:#?}", reg);
