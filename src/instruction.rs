@@ -63,6 +63,9 @@ pub enum OpCode {
 
     XOR(Target),
     EndOfProgram,
+
+    STORE(Target, Target), // These instructions do not exist for the game boy and are only used as convenience instructions
+    STORE16(Target, Target), // First arg dst address 16 bit, seconds arg src direct value 8 / 16 bit
 }
 
 #[allow(non_camel_case_types)]
@@ -513,7 +516,9 @@ lazy_static! {
         // End of program instruction, only used for debugging
         m.insert(0xFD as u8, Instruction::new(OpCode::EndOfProgram, 0, 0, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
 
-
+        // STORE
+        m.insert(0xD3 as u8, Instruction::new(OpCode::STORE(Target::A16, Target::D8), 4, 0, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
+        m.insert(0xDB as u8, Instruction::new(OpCode::STORE(Target::A16, Target::D16), 5, 0, 0, vec![NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED, NOT_AFFECTED]));
 
         m
     };
@@ -1345,6 +1350,13 @@ impl Instruction {
             }
         }
         None
+    }
+
+    pub fn mnemonic_as_string(byte: &u8) -> String {
+        let i = INSTRUCTIONS.get(byte);
+        let s = format!("{:#?}", i.unwrap().opcode);
+        let mnemonic = s.split("(").take(1);
+        mnemonic.last().unwrap().to_string()
     }
 
     pub fn print_instruction_bytes_as_char() {

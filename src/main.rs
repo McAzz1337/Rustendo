@@ -47,8 +47,9 @@ static PRINT_OPCODES: i32 = 0b0010;
 static CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES: i32 = 0b0100;
 static RUN_PROGRAM: i32 = 0b1000;
 
-static RUN_FLAG: i32 =
-    CHECK_INSTRUCTION_DEFINITION_COMPLETENES | CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES;
+static RUN_FLAG: i32 = CHECK_INSTRUCTION_DEFINITION_COMPLETENES
+    | CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES
+    | RUN_PROGRAM;
 
 fn read_program_file(path: String, cpu: &mut Cpu) {
     let code = fs::read(path).expect("Failed to read file");
@@ -58,15 +59,16 @@ fn read_program_file(path: String, cpu: &mut Cpu) {
         if has_data {
             println!("{}", code[i]);
             has_data = false;
-            cpu.write_to_memory(i as u16, code[i]);
+            cpu.write_to_memory(cpu.get_pc() - i as u16, code[i]);
             continue;
         }
         if let Some(instruction) = Instruction::look_up(code[i]) {
             has_data = instruction.length > 1;
             println!("{}: {:#?}", i, instruction);
         }
-        cpu.write_to_memory(i as u16, code[i]);
+        cpu.write_to_memory(cpu.get_pc() - i as u16, code[i]);
     }
+    cpu.get_memory().print_memory_mnemonics();
 }
 
 fn write_program_file(path: String) {
@@ -83,6 +85,7 @@ fn write_program_file(path: String) {
 fn main() {
     let mut cpu = Cpu::new();
     if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
+        println!("Checking instruction implementation completeness");
         // env::set_var("RUST_BACKTRACE", "1");
         cpu.zero_memory();
 
@@ -93,15 +96,10 @@ fn main() {
                 cpu.reset_registers();
             }
         }
-
-        // for i in INSTRUCTIONS.clone() {
-        //     println!("Executing instruction: [{:#x}] {:#?}", &i.0, &i.1);
-        //     cpu.execute(&i.1);
-        //     cpu.reset_registers();
-        // }
     }
 
     if RUN_FLAG & CHECK_INSTRUCTION_DEFINITION_COMPLETENES != 0 {
+        println!("Checking instruction declaration completeness");
         Instruction::test_instruction_completeness();
     }
 
@@ -110,7 +108,11 @@ fn main() {
     }
 
     if RUN_FLAG & RUN_PROGRAM != 0 {
-        // write_program(&mut cpu);
+        println!("Starting program");
+        cpu.set_memory_to_end_of_program();
+
+        cpu.power_up();
+
         // write_program_file("program.bin".to_string());
         read_program_file("program.bin".to_string(), &mut cpu);
 

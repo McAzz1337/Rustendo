@@ -16,6 +16,13 @@ use crate::RUN_FLAG;
 
 use std::ptr;
 
+macro_rules! log {
+    ($a: expr) => {
+        println!("{}", stringify!($a));
+        $a;
+    };
+}
+
 macro_rules! panic_or_print {
     ($a: expr) => {
         if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
@@ -72,6 +79,45 @@ impl Cpu {
         }
     }
 
+    pub fn power_up(&mut self) {
+        println!("cpu.power_up()");
+        self.registers.set_combined_register(Target::BC, 0x0013);
+        self.registers.set_combined_register(Target::DE, 0x00D8);
+        self.registers.set_combined_register(Target::HL, 0x014D);
+        self.sp = 0xFFFE;
+        log!(self.memory.write_byte(0xFF05, 0x00));
+        log!(self.memory.write_byte(0xFF06, 0x00));
+        log!(self.memory.write_byte(0xFF07, 0x00));
+        log!(self.memory.write_byte(0xFF10, 0x80));
+        log!(self.memory.write_byte(0xFF11, 0xBF));
+        log!(self.memory.write_byte(0xFF12, 0xF3));
+        log!(self.memory.write_byte(0xFF14, 0xBF));
+        log!(self.memory.write_byte(0xFF16, 0x3F));
+        log!(self.memory.write_byte(0xFF17, 0x00));
+        log!(self.memory.write_byte(0xFF19, 0xBF));
+        log!(self.memory.write_byte(0xFF1A, 0x7F));
+        log!(self.memory.write_byte(0xFF1B, 0xFF));
+        log!(self.memory.write_byte(0xFF1C, 0x9F));
+        log!(self.memory.write_byte(0xFF1E, 0xBF));
+        log!(self.memory.write_byte(0xFF20, 0xFF));
+        log!(self.memory.write_byte(0xFF21, 0x00));
+        log!(self.memory.write_byte(0xFF22, 0x00));
+        log!(self.memory.write_byte(0xFF23, 0xBF));
+        log!(self.memory.write_byte(0xFF24, 0x77));
+        log!(self.memory.write_byte(0xFF25, 0xF3));
+        log!(self.memory.write_byte(0xFF26, 0xF1)); // 0xF1 for gb / 0xF0 for sgb
+        log!(self.memory.write_byte(0xFF40, 0x91));
+        log!(self.memory.write_byte(0xFF42, 0x00));
+        log!(self.memory.write_byte(0xFF43, 0x00));
+        log!(self.memory.write_byte(0xFF45, 0x00));
+        log!(self.memory.write_byte(0xFF47, 0xFC));
+        log!(self.memory.write_byte(0xFF48, 0xFF));
+        log!(self.memory.write_byte(0xFF49, 0xFF));
+        log!(self.memory.write_byte(0xFF4A, 0x00));
+        log!(self.memory.write_byte(0xFF4B, 0x00));
+        log!(self.memory.write_byte(0xFFFF, 0x00));
+    }
+
     pub fn run(&mut self) {
         while self.tick() {}
     }
@@ -91,6 +137,15 @@ impl Cpu {
     pub fn zero_memory(&mut self) {
         for i in 0..0xFFFF {
             self.memory.write_byte(i, 0);
+        }
+    }
+
+    pub fn set_memory_to_end_of_program(&mut self) {
+        for i in 0..0xFFFF {
+            self.memory.write_byte(
+                i,
+                Instruction::byte_from_opcode(OpCode::EndOfProgram).unwrap(),
+            );
         }
     }
 
@@ -307,6 +362,12 @@ impl Cpu {
             OpCode::XOR(target) => {
                 self.xor(target);
             }
+            OpCode::STORE(dst, src) => {
+                self.store(dst, src);
+            }
+            OpCode::STORE(dst, src) => {
+                self.store_16(dst, src);
+            }
             _ => {
                 if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
                     println!(
@@ -320,7 +381,7 @@ impl Cpu {
             }
         }
 
-        self.pc.wrapping_add(pc_increment)
+        self.pc.wrapping_sub(pc_increment)
     }
 
     fn adc(&mut self, reg: Target) {
@@ -413,11 +474,27 @@ impl Cpu {
 
         match dst {
             Target::HL => {
-                self.registers.l = (v & 0xFF) as u8;
-                self.registers.h = (v >> 8) as u8;
+                let mut x = self.registers.combined_register(dst);
+
+                self.registers
+                    .set_flag(Flag::HalfCarry, x < 0b100000000000 && x + v > 0b11111111111);
+                self.registers
+                    .set_flag(Flag::Carry, (x as u32 + v as u32) > 0b111111111111111);
+                x = x + v;
+                self.registers.set_flag(Flag::Sub, false);
+
+                self.registers.l = (x & 0xFF) as u8;
+                self.registers.h = (x >> 8) as u8;
             }
             Target::SP => {
-                self.sp = v;
+                self.registers.set_flag(
+                    Flag::HalfCarry,
+                    self.sp < 0b100000000000 && self.sp + v > 0b11111111111,
+                );
+                self.registers
+                    .set_flag(Flag::Carry, (self.sp as u32 + v as u32) > 0b111111111111111);
+                self.sp = self.sp + v;
+                self.registers.set_flag(Flag::Sub, false);
             }
             _ => {
                 panic_or_print!(
@@ -447,6 +524,10 @@ impl Cpu {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::AND(src)));
             }
         }
+        self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+        self.registers.set_flag(Flag::Sub, false);
+        self.registers.set_flag(Flag::HalfCarry, true);
+        self.registers.set_flag(Flag::Carry, false);
     }
 
     fn bit(&mut self, bit: u8, reg: Target) {
@@ -1164,6 +1245,16 @@ impl Cpu {
             Target::F => v = &mut self.registers.f,
             Target::H => v = &mut self.registers.h,
             Target::L => v = &mut self.registers.l,
+            Target::HL => {
+                let mut v = self.registers.combined_register(reg);
+                let lsb = v & 1;
+                v = v >> 1;
+                self.registers.set_flag(Flag::Zero, v == 0);
+                self.registers.set_flag(Flag::Sub, false);
+                self.registers.set_flag(Flag::Carry, lsb != 0);
+                self.registers.set_flag(Flag::HalfCarry, false);
+                self.registers.set_combined_register(reg, v);
+            }
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SRL(reg)));
             }
@@ -1256,22 +1347,6 @@ impl Cpu {
         }
     }
 
-    // fn add_hl(&mut self, src: Target) {
-    //     match src {
-    //         Target::A => self.registers.hl = self.registers.hl.wrapping_add(self.registers.a),
-    //         Target::B => self.registers.hl = self.registers.hl.wrapping_add(self.registers.b),
-    //         Target::C => self.registers.hl = self.registers.hl.wrapping_add(self.registers.c),
-    //         Target::D => self.registers.hl = self.registers.hl.wrapping_add(self.registers.d),
-    //         Target::E => self.registers.hl = self.registers.hl.wrapping_add(self.registers.e),
-    //         Target::F => self.registers.hl = self.registers.hl.wrapping_add(self.registers.f),
-    //         Target::L => self.registers.hl = self.registers.hl.wrapping_add(self.registers.l),
-    //         Target::H => self.registers.hl = self.registers.hl.wrapping_add(self.registers.h),
-    //         _ => {
-    //             panic_or_print!("Unimplemented")
-    //         }
-    //     }
-    // }
-
     fn xor(&mut self, src: Target) {
         match src {
             Target::A => self.registers.a = self.registers.a ^ self.registers.a,
@@ -1293,6 +1368,10 @@ impl Cpu {
         }
     }
 
+    fn store(&mut self, dst: Target, src: Target) {}
+
+    fn store_16(&mut self, dst: Target, src: Target) {}
+
     pub fn set_a(&mut self, value: u8) {
         self.registers.a = value;
     }
@@ -1308,6 +1387,10 @@ impl Cpu {
 
     pub fn get_pc(&self) -> u16 {
         self.pc
+    }
+
+    pub fn get_memory(&mut self) -> &mut Memory {
+        &mut self.memory
     }
 
     pub fn reset_registers(&mut self) {
