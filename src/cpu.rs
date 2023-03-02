@@ -547,10 +547,10 @@ impl Cpu {
         }
         let bit = v & (1 << bit);
 
+        // Carry not affected
         self.registers.set_flag(Flag::Zero, bit == 0);
-        self.registers.set_flag(Flag::Carry, false);
-        self.registers.set_flag(Flag::HalfCarry, true);
         self.registers.set_flag(Flag::Sub, false);
+        self.registers.set_flag(Flag::HalfCarry, true);
     }
 
     fn call(&mut self, flag: Flag) -> bool {
@@ -568,6 +568,7 @@ impl Cpu {
             return true;
         }
 
+        // No flags affected
         false
     }
 
@@ -591,15 +592,19 @@ impl Cpu {
         let result = self.registers.a as u16 - v;
         self.registers.set_flag(Flag::Zero, result == 0);
         self.registers.set_flag(Flag::Sub, true);
-        self.registers.set_flag(Flag::HalfCarry, reg == Target::R8);
         self.registers.set_flag(
-            Flag::Carry,
-            reg == Target::R8 || (self.registers.a as u16).lt(&v),
+            Flag::HalfCarry,
+            self.registers.a > 0b1111 && result < 0b10000,
         );
+        self.registers
+            .set_flag(Flag::Carry, (self.registers.a as u16) < v);
     }
 
     fn cpl(&mut self) {
         self.registers.a = !self.registers.a;
+
+        self.registers.set_flag(Flag::Sub, true);
+        self.registers.set_flag(Flag::HalfCarry, true);
     }
 
     fn dda(&mut self) {
