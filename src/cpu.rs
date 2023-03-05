@@ -1,6 +1,10 @@
 use crate::instruction::Target;
 extern crate libc;
 
+use crate::instruction::{
+    AFFECTED, CARRY_FLAG, HALF_CARRY__FLAG, NOT_AFFECTED, RESET, SET, SUB_FLAG, ZERO_FLAG,
+};
+
 #[allow(unused_imports)]
 use crate::registers::{CARRY_BIT_POS, HALF_CARRY_BIT_POS, SUB_BIT_POS, ZERO_BIT_POS};
 use std::mem;
@@ -116,6 +120,148 @@ impl Cpu {
         log!(self.memory.write_byte(0xFF4A, 0x00));
         log!(self.memory.write_byte(0xFF4B, 0x00));
         log!(self.memory.write_byte(0xFFFF, 0x00));
+    }
+
+    fn set_flags(&mut self, instruction: &Instruction, old_value: u8, new_value: u8) {
+        match instruction.flags[ZERO_FLAG] {
+            RESET => {
+                self.registers.set_flag(Flag::Zero, false);
+            }
+            SET => {
+                self.registers.set_flag(Flag::Zero, true);
+            }
+            AFFECTED => {
+                if new_value == 0 {
+                    self.registers.set_flag(Flag::Zero, true);
+                }
+            }
+            _ => {}
+        }
+
+        match instruction.flags[SUB_FLAG] {
+            RESET => {
+                self.registers.set_flag(Flag::Sub, false);
+            }
+            SET => {
+                self.registers.set_flag(Flag::Sub, true);
+            }
+            AFFECTED => {
+                // Check if this arm ever gets executed
+            }
+            _ => {}
+        }
+
+        match instruction.flags[HALF_CARRY__FLAG] {
+            RESET => {
+                self.registers.set_flag(Flag::HalfCarry, false);
+            }
+            SET => {
+                self.registers.set_flag(Flag::HalfCarry, true);
+            }
+            AFFECTED => {
+                if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
+                    self.registers
+                        .set_flag(Flag::HalfCarry, old_value > 0b1111 && new_value < 0b10000);
+                } else if instruction.flags[SUB_FLAG] == RESET {
+                    self.registers
+                        .set_flag(Flag::HalfCarry, old_value < 0b10000 && new_value > 0b1111);
+                }
+            }
+            _ => {}
+        }
+
+        match instruction.flags[CARRY_FLAG] {
+            RESET => {
+                self.registers.set_flag(Flag::Carry, false);
+            }
+            SET => {
+                self.registers.set_flag(Flag::Carry, true);
+            }
+            AFFECTED => {
+                if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
+                    self.registers
+                        .set_flag(Flag::Carry, old_value > 0b0 && old_value < new_value);
+                } else if instruction.flags[SUB_FLAG] == RESET {
+                    self.registers
+                        .set_flag(Flag::Carry, old_value < 0b11111111 && old_value > new_value);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn set_flags_16(&mut self, instruction: &Instruction, old_value: u16, new_value: u16) {
+        match instruction.flags[ZERO_FLAG] {
+            RESET => {
+                self.registers.set_flag(Flag::Zero, false);
+            }
+            SET => {
+                self.registers.set_flag(Flag::Zero, true);
+            }
+            AFFECTED => {
+                if new_value == 0 {
+                    self.registers.set_flag(Flag::Zero, true);
+                }
+            }
+            _ => {}
+        }
+
+        match instruction.flags[SUB_FLAG] {
+            RESET => {
+                self.registers.set_flag(Flag::Sub, false);
+            }
+            SET => {
+                self.registers.set_flag(Flag::Sub, true);
+            }
+            AFFECTED => {
+                // Check if this arm ever gets executed
+            }
+            _ => {}
+        }
+
+        match instruction.flags[HALF_CARRY__FLAG] {
+            RESET => {
+                self.registers.set_flag(Flag::HalfCarry, false);
+            }
+            SET => {
+                self.registers.set_flag(Flag::HalfCarry, true);
+            }
+            AFFECTED => {
+                if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
+                    self.registers.set_flag(
+                        Flag::HalfCarry,
+                        old_value > 0b11111111 && new_value < 0b100000000,
+                    );
+                } else if instruction.flags[SUB_FLAG] == RESET {
+                    self.registers.set_flag(
+                        Flag::HalfCarry,
+                        old_value < 0b100000000 && new_value > 0b11111111,
+                    );
+                }
+            }
+            _ => {}
+        }
+
+        match instruction.flags[CARRY_FLAG] {
+            RESET => {
+                self.registers.set_flag(Flag::Carry, false);
+            }
+            SET => {
+                self.registers.set_flag(Flag::Carry, true);
+            }
+            AFFECTED => {
+                if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
+                    self.registers
+                        .set_flag(Flag::Carry, old_value > 0b0 && old_value < new_value);
+                } else if instruction.flags[SUB_FLAG] == RESET {
+                    self.registers.set_flag(
+                        Flag::Carry,
+                        old_value < 0b1111111111111111 && old_value > new_value,
+                    );
+                }
+            }
+            _ => {}
+        }
     }
 
     pub fn run(&mut self) {
@@ -387,34 +533,37 @@ impl Cpu {
     fn adc(&mut self, reg: Target) {
         let v;
         match reg {
-            Target::A => v = self.registers.a as u16,
-            Target::B => v = self.registers.b as u16,
-            Target::C => v = self.registers.c as u16,
-            Target::D => v = self.registers.d as u16,
-            Target::E => v = self.registers.e as u16,
-            Target::H => v = self.registers.h as u16,
-            Target::L => v = self.registers.l as u16,
-            Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
-            Target::D8 => v = self.memory.read_byte(self.pc + 1) as u16,
+            Target::A => v = self.registers.a,
+            Target::B => v = self.registers.b,
+            Target::C => v = self.registers.c,
+            Target::D => v = self.registers.d,
+            Target::E => v = self.registers.e,
+            Target::H => v = self.registers.h,
+            Target::L => v = self.registers.l,
+            Target::HL => v = self.memory.read_byte(self.registers.combined_register(reg)),
+            Target::D8 => v = self.memory.read_byte(self.pc + 1),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::ADC(reg)));
             }
         }
 
-        let carry = self.registers.filter_flag(Flag::Carry) as u16;
-        self.registers
-            .set_flag(Flag::Zero, self.registers.a as u16 + v + carry == 256);
-        self.registers
-            .set_flag(Flag::Carry, self.registers.a as u16 + v + carry > 255);
-        self.registers.set_flag(
-            Flag::HalfCarry,
-            self.registers.a < 0b10000 && self.registers.a as u16 + v + carry > 0b1111,
-        );
-        self.registers.set_flag(Flag::Sub, false);
+        let carry = self.registers.filter_flag(Flag::Carry);
+        // self.registers
+        //     .set_flag(Flag::Zero, self.registers.a as u16 + v + carry == 256);
+        // self.registers
+        //     .set_flag(Flag::Carry, self.registers.a as u16 + v + carry > 255);
+        // self.registers.set_flag(
+        //     Flag::HalfCarry,
+        //     self.registers.a < 0b10000 && self.registers.a as u16 + v + carry > 0b1111,
+        // );
+        // self.registers.set_flag(Flag::Sub, false);
+        self.registers.a = self.registers.a.wrapping_add(v).wrapping_add(carry);
 
-        self.registers.a = (self.registers.a as u16)
-            .wrapping_add(v)
-            .wrapping_add(carry) as u8;
+        self.set_flags(
+            Instruction::from_opcode(OpCode::ADC(reg)).unwrap(),
+            v,
+            self.registers.a,
+        );
     }
 
     fn add(&mut self, src: Target) {
@@ -442,22 +591,30 @@ impl Cpu {
             }
         }
 
-        self.registers
-            .set_flag(Flag::Carry, self.registers.a as i32 + v as i32 > 255);
+        // self.registers
+        //     .set_flag(Flag::Carry, self.registers.a as i32 + v as i32 > 255);
 
-        self.registers.set_flag(
-            Flag::HalfCarry,
-            self.registers.a < 0b1111 && self.registers.a + v >= 0b1111,
-        );
+        // self.registers.set_flag(
+        //     Flag::HalfCarry,
+        //     self.registers.a < 0b1111 && self.registers.a + v >= 0b1111,
+        // );
 
         self.registers.a = self.registers.a.wrapping_add(v);
-        self.registers.set_flag(Flag::Zero, self.registers.a == 0);
-        self.registers.set_flag(Flag::Sub, false);
+        // self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+        // self.registers.set_flag(Flag::Sub, false);
+
+        self.set_flags(
+            Instruction::from_opcode(OpCode::ADD(src)).unwrap(),
+            v,
+            self.registers.a,
+        );
     }
 
     #[allow(unused_assignments)]
     fn add_16(&mut self, dst: Target, src: Target) {
         let mut v: u16 = 0;
+        let mut old: u16 = 0;
+        let mut d: u16 = 0;
         match src {
             Target::HL => v = ((self.registers.h as u16) << 8) + self.registers.h as u16,
             Target::BC => v = ((self.registers.b as u16) << 8) + self.registers.c as u16,
@@ -475,26 +632,30 @@ impl Cpu {
         match dst {
             Target::HL => {
                 let mut x = self.registers.combined_register(dst);
+                old = x;
 
-                self.registers
-                    .set_flag(Flag::HalfCarry, x < 0b100000000000 && x + v > 0b11111111111);
-                self.registers
-                    .set_flag(Flag::Carry, (x as u32 + v as u32) > 0b111111111111111);
+                // self.registers
+                //     .set_flag(Flag::HalfCarry, x < 0b100000000000 && x + v > 0b11111111111);
+                // self.registers
+                //     .set_flag(Flag::Carry, (x as u32 + v as u32) > 0b111111111111111);
                 x = x + v;
-                self.registers.set_flag(Flag::Sub, false);
+                d = x;
+                // self.registers.set_flag(Flag::Sub, false);
 
                 self.registers.l = (x & 0xFF) as u8;
                 self.registers.h = (x >> 8) as u8;
             }
             Target::SP => {
-                self.registers.set_flag(
-                    Flag::HalfCarry,
-                    self.sp < 0b100000000000 && self.sp + v > 0b11111111111,
-                );
-                self.registers
-                    .set_flag(Flag::Carry, (self.sp as u32 + v as u32) > 0b111111111111111);
+                // self.registers.set_flag(
+                //     Flag::HalfCarry,
+                //     self.sp < 0b100000000000 && self.sp + v > 0b11111111111,
+                // );
+                // self.registers
+                //     .set_flag(Flag::Carry, (self.sp as u32 + v as u32) > 0b111111111111111);
+                old = self.sp;
                 self.sp = self.sp + v;
-                self.registers.set_flag(Flag::Sub, false);
+                d = self.sp;
+                // self.registers.set_flag(Flag::Sub, false);
             }
             _ => {
                 panic_or_print!(
@@ -503,9 +664,16 @@ impl Cpu {
                 );
             }
         }
+
+        self.set_flags_16(
+            Instruction::from_opcode(OpCode::ADD16(dst, src)).unwrap(),
+            old,
+            d,
+        );
     }
 
     fn and(&mut self, src: Target) {
+        let old = self.registers.a;
         match src {
             Target::A => self.registers.a = self.registers.a & self.registers.a,
             Target::B => self.registers.a = self.registers.a & self.registers.b,
@@ -524,13 +692,18 @@ impl Cpu {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::AND(src)));
             }
         }
-        self.registers.set_flag(Flag::Zero, self.registers.a == 0);
-        self.registers.set_flag(Flag::Sub, false);
-        self.registers.set_flag(Flag::HalfCarry, true);
-        self.registers.set_flag(Flag::Carry, false);
+        // self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+        // self.registers.set_flag(Flag::Sub, false);
+        // self.registers.set_flag(Flag::HalfCarry, true);
+        // self.registers.set_flag(Flag::Carry, false);
+        self.set_flags(
+            Instruction::from_opcode(OpCode::AND(src)).unwrap(),
+            old,
+            self.registers.a,
+        );
     }
 
-    fn bit(&mut self, bit: u8, reg: Target) {
+    fn bit(&mut self, bit_pos: u8, reg: Target) {
         let mut v = 0;
         match reg {
             Target::A => v = self.registers.a,
@@ -542,15 +715,23 @@ impl Cpu {
             Target::L => v = self.registers.l,
             // Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::BIT(bit, reg)));
+                panic_or_print!(
+                    "Unimplemented {}",
+                    format!("{:#?}", OpCode::BIT(bit_pos, reg))
+                );
             }
         }
-        let bit = v & (1 << bit);
+        let bit = v & (1 << bit_pos);
 
         // Carry not affected
-        self.registers.set_flag(Flag::Zero, bit == 0);
-        self.registers.set_flag(Flag::Sub, false);
-        self.registers.set_flag(Flag::HalfCarry, true);
+        // self.registers.set_flag(Flag::Zero, bit == 0);
+        // self.registers.set_flag(Flag::Sub, false);
+        // self.registers.set_flag(Flag::HalfCarry, true);
+        self.set_flags(
+            Instruction::from_opcode(OpCode::BIT(bit_pos, reg)).unwrap(),
+            v,
+            bit,
+        );
     }
 
     fn call(&mut self, flag: Flag) -> bool {
@@ -590,21 +771,28 @@ impl Cpu {
         }
 
         let result = self.registers.a as u16 - v;
-        self.registers.set_flag(Flag::Zero, result == 0);
-        self.registers.set_flag(Flag::Sub, true);
-        self.registers.set_flag(
-            Flag::HalfCarry,
-            self.registers.a > 0b1111 && result < 0b10000,
+        // self.registers.set_flag(Flag::Zero, result == 0);
+        // self.registers.set_flag(Flag::Sub, true);
+        // self.registers.set_flag(
+        //     Flag::HalfCarry,
+        //     self.registers.a > 0b1111 && result < 0b10000,
+        // );
+        // self.registers
+        //     .set_flag(Flag::Carry, (self.registers.a as u16) < v); {
+
+        self.set_flags_16(
+            Instruction::from_opcode(OpCode::CP(reg)).unwrap(),
+            v,
+            result,
         );
-        self.registers
-            .set_flag(Flag::Carry, (self.registers.a as u16) < v);
     }
 
     fn cpl(&mut self) {
         self.registers.a = !self.registers.a;
 
-        self.registers.set_flag(Flag::Sub, true);
-        self.registers.set_flag(Flag::HalfCarry, true);
+        self.set_flags(Instruction::from_opcode(OpCode::CPL).unwrap(), 0, 0);
+        // self.registers.set_flag(Flag::Sub, true);
+        // self.registers.set_flag(Flag::HalfCarry, true);
     }
 
     fn dda(&mut self) {
@@ -623,6 +811,7 @@ impl Cpu {
         self.registers.a = (self.registers.a).wrapping_add(correction);
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
         self.registers.set_flag(Flag::HalfCarry, false);
+        // Do not call self.set_flags() for this instruction, since it is an edge case
     }
 
     fn dec(&mut self, target: Target) {
@@ -640,12 +829,18 @@ impl Cpu {
                 let mut v = self
                     .memory
                     .read_byte(self.registers.combined_register(target));
-                self.registers.set_flag(Flag::HalfCarry, v == 0b10000);
+                // self.registers.set_flag(Flag::HalfCarry, v == 0b10000);
+                let old = v;
                 v = v.wrapping_sub(1);
-                self.registers.set_flag(Flag::Zero, v == 0);
-                self.registers.set_flag(Flag::Sub, true);
+                // self.registers.set_flag(Flag::Zero, v == 0);
+                // self.registers.set_flag(Flag::Sub, true);
                 self.memory
                     .write_byte(self.registers.combined_register(target), v);
+                self.set_flags(
+                    Instruction::from_opcode(OpCode::DEC(target)).unwrap(),
+                    old,
+                    v,
+                );
                 return;
             }
             _ => {
@@ -654,24 +849,42 @@ impl Cpu {
         }
 
         unsafe {
-            self.registers.set_flag(Flag::HalfCarry, false);
-            self.registers.set_flag(Flag::Carry, false);
-            self.registers.set_flag(Flag::Sub, true);
-
+            // self.registers.set_flag(Flag::HalfCarry, false);
+            // self.registers.set_flag(Flag::Carry, false);
+            // self.registers.set_flag(Flag::Sub, true);
+            let old = *v;
             *v = (*v).wrapping_sub(1);
-            self.registers.set_flag(Flag::Zero, *v == 0);
+            // self.registers.set_flag(Flag::Zero, *v == 0);
+            self.set_flags(
+                Instruction::from_opcode(OpCode::DEC(target)).unwrap(),
+                old,
+                *v,
+            );
         }
     }
 
     fn dec_16(&mut self, target: Target) {
+        let mut old = 0;
+        let mut new = 0;
         if target == Target::SP {
+            old = self.sp;
             self.sp = self.sp.wrapping_sub(1);
+            new = self.sp;
+            self.set_flags_16(
+                Instruction::from_opcode(OpCode::DEC16(target)).unwrap(),
+                old,
+                new,
+            );
             return;
         }
 
-        self.registers.set_combined_register(
-            target,
-            self.registers.combined_register(target).wrapping_sub(1),
+        old = self.registers.combined_register(target);
+        new = old.wrapping_sub(1);
+        self.registers.set_combined_register(target, new);
+        self.set_flags_16(
+            Instruction::from_opcode(OpCode::DEC16(target)).unwrap(),
+            old,
+            new,
         );
     }
 
@@ -690,12 +903,18 @@ impl Cpu {
                 let mut v = self
                     .memory
                     .read_byte(self.registers.combined_register(target));
-                self.registers.set_flag(Flag::HalfCarry, v == 0b1111);
+                let old = v;
+                // self.registers.set_flag(Flag::HalfCarry, v == 0b1111);
                 v = v.wrapping_add(1);
-                self.registers.set_flag(Flag::Zero, v == 0);
-                self.registers.set_flag(Flag::Sub, false);
+                // self.registers.set_flag(Flag::Zero, v == 0);
+                // self.registers.set_flag(Flag::Sub, false);
                 self.memory
                     .write_byte(self.registers.combined_register(target), v);
+                self.set_flags(
+                    Instruction::from_opcode(OpCode::INC(target)).unwrap(),
+                    old,
+                    v,
+                );
                 return;
             }
             _ => {
@@ -704,24 +923,40 @@ impl Cpu {
         }
 
         unsafe {
-            self.registers.set_flag(Flag::HalfCarry, *v == 0b1111);
-            self.registers.set_flag(Flag::Carry, *v == 0b11111111);
-            self.registers.set_flag(Flag::Sub, false);
+            // self.registers.set_flag(Flag::HalfCarry, *v == 0b1111);
+            // self.registers.set_flag(Flag::Carry, *v == 0b11111111);
+            // self.registers.set_flag(Flag::Sub, false);
 
+            let old = *v;
             *v = (*v).wrapping_add(1);
-            self.registers.set_flag(Flag::Zero, *v == 0);
+            self.set_flags(
+                Instruction::from_opcode(OpCode::INC(target)).unwrap(),
+                old,
+                *v,
+            );
+            // self.registers.set_flag(Flag::Zero, *v == 0);
         }
     }
 
     fn inc_16(&mut self, target: Target) {
         if target == Target::SP {
+            let old = self.sp;
             self.sp = self.sp.wrapping_add(1);
+            self.set_flags_16(
+                Instruction::from_opcode(OpCode::INC16(target)).unwrap(),
+                old,
+                self.sp,
+            );
             return;
         }
 
-        self.registers.set_combined_register(
-            target,
-            self.registers.combined_register(target).wrapping_add(1),
+        let old = self.registers.combined_register(target);
+        let new = old.wrapping_add(1);
+        self.registers.set_combined_register(target, new);
+        self.set_flags_16(
+            Instruction::from_opcode(OpCode::INC16(target)).unwrap(),
+            old,
+            new,
         );
     }
 
@@ -925,6 +1160,7 @@ impl Cpu {
     }
 
     fn or(&mut self, src: Target) {
+        let old = self.registers.a;
         match src {
             Target::A => self.registers.a = self.registers.a | self.registers.a,
             Target::B => self.registers.a = self.registers.a | self.registers.b,
@@ -943,6 +1179,12 @@ impl Cpu {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::OR(src)));
             }
         }
+
+        self.set_flags(
+            Instruction::from_opcode(OpCode::OR(src)).unwrap(),
+            old,
+            self.registers.a,
+        );
     }
 
     fn pop(&mut self, target: Target) {
@@ -1018,6 +1260,7 @@ impl Cpu {
         self.registers.a = self.registers.a << 1 | carry;
         self.registers.set_flag(Flag::Carry, msb != 0);
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+        // Do not call self.set_flags()
     }
 
     fn rlca(&mut self) {

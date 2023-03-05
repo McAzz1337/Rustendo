@@ -134,8 +134,15 @@ impl Instruction {
     }
 }
 
-static AFFECTED: u8 = 2;
-static NOT_AFFECTED: u8 = 3;
+pub const ZERO_FLAG: usize = 0;
+pub const SUB_FLAG: usize = 1;
+pub const HALF_CARRY__FLAG: usize = 2;
+pub const CARRY_FLAG: usize = 3;
+
+pub const RESET: u8 = 0;
+pub const SET: u8 = 1;
+pub const AFFECTED: u8 = 2;
+pub const NOT_AFFECTED: u8 = 3;
 
 lazy_static! {
     pub static ref INSTRUCTIONS: HashMap<u8, Instruction> = {
