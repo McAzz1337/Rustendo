@@ -19,6 +19,7 @@ use crate::instruction::INSTRUCTIONS;
 
 use std::env;
 use std::fs;
+use std::io::stdin;
 
 macro_rules! _assert_eq {
     ($a: expr, $b: expr) => {
@@ -47,9 +48,15 @@ static PRINT_OPCODES: i32 = 0b0010;
 static CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES: i32 = 0b0100;
 static RUN_PROGRAM: i32 = 0b1000;
 
-static RUN_FLAG: i32 = CHECK_INSTRUCTION_DEFINITION_COMPLETENES
-    | CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES
-    | RUN_PROGRAM;
+static RUN_FLAG: i32 = RUN_PROGRAM;
+
+fn print_program(path: String) {
+    let code = fs::read(path).expect("Failed to read file");
+
+    for i in 0..code.len() {
+        println!("{}", code[i]);
+    }
+}
 
 fn read_program_file(path: String, cpu: &mut Cpu) {
     let code = fs::read(path).expect("Failed to read file");
@@ -114,7 +121,17 @@ fn main() {
         cpu.power_up();
 
         // write_program_file("program.bin".to_string());
-        read_program_file("program.bin".to_string(), &mut cpu);
+        // read_program_file("roms/Tetris.gb".to_string(), &mut cpu);
+
+        print_program("roms/Tetris.gb".to_string());
+
+        // for i in 0..cpu.get_memory().get_size() {
+        //     if i % 20 == 0 {
+        //         let mut s = String::new();
+        //         stdin().read_line(&mut s).expect("Summit went wron");
+        //     }
+        //     println!("{:#x}:\t{:#x}", i, cpu.read_memory(i as u16));
+        // }
 
         cpu.run();
 

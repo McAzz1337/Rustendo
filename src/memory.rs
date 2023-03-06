@@ -18,6 +18,9 @@ pub const ROM: u16 = 0x0000;
 
 const RAM_ECHO_OFFSET: u16 = ECHO_OF_INTERNAL_RAM - RAM;
 
+pub const TILE_PATTERN_1: u16 = 0x8000;
+pub const TILE_PATTERN_2: u16 = 0x9000;
+
 lazy_static! {
     static ref NINTENDO_SPLASH_SCREEN: Vec<u8> = vec![
         0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00,
@@ -82,6 +85,10 @@ impl Memory {
 
     pub fn read_as_hex_strign(&self, address: u16) -> String {
         utils::as_hex_string(self.memory[address as usize])
+    }
+
+    pub fn get_size(&self) -> usize {
+        self.size
     }
 
     pub fn print(&mut self) {

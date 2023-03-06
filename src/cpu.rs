@@ -1269,6 +1269,7 @@ impl Cpu {
         self.registers.a = self.registers.a.rotate_left(1);
 
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+        // Do not call self.set_flags()
     }
 
     fn rra(&mut self) {
@@ -1277,6 +1278,7 @@ impl Cpu {
         self.registers.a = self.registers.a >> 1 | carry;
         self.registers.set_flag(Flag::Carry, lsb != 0);
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+        // Do not call self.set_flags()
     }
 
     fn rrca(&mut self) {
@@ -1285,22 +1287,59 @@ impl Cpu {
         self.registers.a = self.registers.a.rotate_right(1);
 
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
+        // Do not call self.set_flags()
     }
 
     fn rl(&mut self, reg: Target) {
+        let old;
+        let new;
         match reg {
-            Target::A => self.registers.a = self.registers.a.rotate_left(1),
-            Target::B => self.registers.b = self.registers.b.rotate_left(1),
-            Target::C => self.registers.c = self.registers.c.rotate_left(1),
-            Target::D => self.registers.d = self.registers.d.rotate_left(1),
-            Target::E => self.registers.e = self.registers.e.rotate_left(1),
-            Target::F => self.registers.f = self.registers.f.rotate_left(1),
-            Target::H => self.registers.h = self.registers.h.rotate_left(1),
-            Target::L => self.registers.l = self.registers.l.rotate_left(1),
+            Target::A => {
+                old = self.registers.a;
+                self.registers.a = self.registers.a.rotate_left(1);
+                new = self.registers.a
+            }
+            Target::B => {
+                old = self.registers.b;
+                self.registers.b = self.registers.b.rotate_left(1);
+                new = self.registers.b
+            }
+            Target::C => {
+                old = self.registers.c;
+                self.registers.c = self.registers.c.rotate_left(1);
+                new = self.registers.c
+            }
+            Target::D => {
+                old = self.registers.d;
+                self.registers.d = self.registers.d.rotate_left(1);
+                new = self.registers.d
+            }
+            Target::E => {
+                old = self.registers.e;
+                self.registers.e = self.registers.e.rotate_left(1);
+                new = self.registers.e
+            }
+            Target::F => {
+                old = self.registers.f;
+                self.registers.f = self.registers.f.rotate_left(1);
+                new = self.registers.f
+            }
+            Target::H => {
+                old = self.registers.h;
+                self.registers.h = self.registers.h.rotate_left(1);
+                new = self.registers.h
+            }
+            Target::L => {
+                old = self.registers.l;
+                self.registers.l = self.registers.l.rotate_left(1);
+                new = self.registers.l
+            }
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RL(reg)));
             }
         }
+
+        self.set_flags(Instruction::from_opcode(OpCode::RL(reg)).unwrap(), old, new);
     }
 
     fn rlc(&mut self, reg: Target) {
@@ -1334,19 +1373,55 @@ impl Cpu {
     }
 
     fn rr(&mut self, reg: Target) {
+        let old;
+        let new;
         match reg {
-            Target::A => self.registers.a = self.registers.a.rotate_right(1),
-            Target::B => self.registers.b = self.registers.b.rotate_right(1),
-            Target::C => self.registers.c = self.registers.c.rotate_right(1),
-            Target::D => self.registers.d = self.registers.d.rotate_right(1),
-            Target::E => self.registers.e = self.registers.e.rotate_right(1),
-            Target::F => self.registers.f = self.registers.f.rotate_right(1),
-            Target::H => self.registers.h = self.registers.h.rotate_right(1),
-            Target::L => self.registers.l = self.registers.l.rotate_right(1),
+            Target::A => {
+                old = self.registers.a;
+                self.registers.a = self.registers.a.rotate_right(1);
+                new = self.registers.a;
+            }
+            Target::B => {
+                old = self.registers.b;
+                self.registers.b = self.registers.b.rotate_right(1);
+                new = self.registers.b;
+            }
+            Target::C => {
+                old = self.registers.c;
+                self.registers.c = self.registers.c.rotate_right(1);
+                new = self.registers.c;
+            }
+            Target::D => {
+                old = self.registers.d;
+                self.registers.d = self.registers.d.rotate_right(1);
+                new = self.registers.d;
+            }
+            Target::E => {
+                old = self.registers.e;
+                self.registers.e = self.registers.e.rotate_right(1);
+                new = self.registers.e;
+            }
+            Target::F => {
+                old = self.registers.f;
+                self.registers.f = self.registers.f.rotate_right(1);
+                new = self.registers.f;
+            }
+            Target::H => {
+                old = self.registers.h;
+                self.registers.h = self.registers.h.rotate_right(1);
+                new = self.registers.h;
+            }
+            Target::L => {
+                old = self.registers.l;
+                self.registers.l = self.registers.l.rotate_right(1);
+                new = self.registers.l;
+            }
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RR(reg)));
             }
         }
+
+        self.set_flags(Instruction::from_opcode(OpCode::RR(reg)).unwrap(), old, new);
     }
 
     #[allow(unused_assignments)]
@@ -1387,34 +1462,39 @@ impl Cpu {
     fn sbc(&mut self, reg: Target) {
         let v;
         match reg {
-            Target::A => v = self.registers.a as u16,
-            Target::B => v = self.registers.b as u16,
-            Target::C => v = self.registers.c as u16,
-            Target::D => v = self.registers.d as u16,
-            Target::E => v = self.registers.e as u16,
-            Target::H => v = self.registers.h as u16,
-            Target::L => v = self.registers.l as u16,
-            Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
-            Target::D8 => v = self.memory.read_byte(self.pc + 1) as u16,
+            Target::A => v = self.registers.a,
+            Target::B => v = self.registers.b,
+            Target::C => v = self.registers.c,
+            Target::D => v = self.registers.d,
+            Target::E => v = self.registers.e,
+            Target::H => v = self.registers.h,
+            Target::L => v = self.registers.l,
+            Target::HL => v = self.memory.read_byte(self.registers.combined_register(reg)),
+            Target::D8 => v = self.memory.read_byte(self.pc + 1),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SBC(reg)));
             }
         }
 
-        let carry = self.registers.filter_flag(Flag::Carry) as u16;
-        self.registers
-            .set_flag(Flag::Zero, self.registers.a as u16 == v);
-        self.registers.set_flag(Flag::Sub, true);
-        self.registers.set_flag(
-            Flag::Carry,
-            self.registers.a > 0b1111 && self.registers.a as u16 - v - carry < 0b10000,
-        );
-        self.registers
-            .set_flag(Flag::Zero, (self.registers.a as u16).lt(&(v + carry)));
+        let carry = self.registers.filter_flag(Flag::Carry);
+        let old = self.registers.a;
 
-        self.registers.a = (self.registers.a as u16)
-            .wrapping_sub(v)
-            .wrapping_sub(carry) as u8;
+        // self.registers.set_flag(Flag::Zero, self.registers.a == v);
+        // self.registers.set_flag(Flag::Sub, true);
+        // self.registers.set_flag(
+        //     Flag::Carry,
+        //     self.registers.a > 0b1111 && self.registers.a - v - carry < 0b10000,
+        // );
+        // self.registers
+        //     .set_flag(Flag::Zero, self.registers.a.lt(&(v + carry)));
+
+        self.registers.a = self.registers.a.wrapping_sub(v).wrapping_sub(carry) as u8;
+
+        self.set_flags(
+            Instruction::from_opcode(OpCode::SBC(reg)).unwrap(),
+            old,
+            self.registers.a,
+        );
     }
 
     fn set(&mut self, bit: u8, reg: Target) {
@@ -1438,7 +1518,6 @@ impl Cpu {
         }
     }
 
-    #[allow(dead_code)]
     fn sl(&mut self, reg: Target) {
         match reg {
             Target::A => self.registers.a = self.registers.a << 1,
@@ -1564,12 +1643,17 @@ impl Cpu {
             }
         }
 
-        self.registers.set_flag(Flag::Zero, v >= self.registers.a);
-
+        // self.registers.set_flag(Flag::Zero, v >= self.registers.a);
+        let old = self.registers.a;
         self.registers.a = self.registers.a.wrapping_sub(v);
-        self.registers.set_flag(Flag::Sub, true);
-        self.registers.set_flag(Flag::HalfCarry, false);
-        self.registers.set_flag(Flag::Carry, false);
+        // self.registers.set_flag(Flag::Sub, true);
+        // self.registers.set_flag(Flag::HalfCarry, false);
+        // self.registers.set_flag(Flag::Carry, false);
+        self.set_flags(
+            Instruction::from_opcode(OpCode::SUB(src)).unwrap(),
+            old,
+            self.registers.a,
+        );
     }
 
     fn swap(&mut self, reg: Target) {
@@ -1591,11 +1675,18 @@ impl Cpu {
         unsafe {
             let upper = *v & (0b1111 << 4);
             let lower = *v & 0b1111;
+            let old = *v;
             *v = (upper >> 4) | (lower << 4);
+            self.set_flags(
+                Instruction::from_opcode(OpCode::SWAP(reg)).unwrap(),
+                old,
+                *v,
+            );
         }
     }
 
     fn xor(&mut self, src: Target) {
+        let old = self.registers.a;
         match src {
             Target::A => self.registers.a = self.registers.a ^ self.registers.a,
             Target::B => self.registers.a = self.registers.a ^ self.registers.b,
@@ -1614,6 +1705,12 @@ impl Cpu {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::XOR(src)));
             }
         }
+
+        self.set_flags(
+            Instruction::from_opcode(OpCode::XOR(src)).unwrap(),
+            old,
+            self.registers.a,
+        );
     }
 
     fn store(&mut self, dst: Target, src: Target) {}
@@ -1985,6 +2082,16 @@ fn test_sub() {
     cpu.sub(Target::B);
 
     assert!(cpu.registers.a == 255);
+    assert!(!cpu.registers.get_flag(Flag::Zero));
+    assert!(!cpu.registers.get_flag(Flag::Carry));
+    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
+    assert!(cpu.registers.get_flag(Flag::Sub));
+
+    cpu.registers.a = 5;
+    cpu.registers.b = 5;
+    cpu.sub(Target::B);
+
+    assert!(cpu.registers.a == 0);
     assert!(cpu.registers.get_flag(Flag::Zero));
     assert!(!cpu.registers.get_flag(Flag::Carry));
     assert!(!cpu.registers.get_flag(Flag::HalfCarry));
