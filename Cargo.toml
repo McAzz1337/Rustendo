@@ -6,8 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-get_set = { path = "../libs/get_set" }
-builder  = { path = "../libs/builder" }
-lmg_offset = { path = "../libs/lmg_offset" }
+get_set = { path = "../lib/get_set" }
+builder  = { path = "../lib/builder" }
+lmg_offset = { path = "../lib/lmg_offset" }
 lazy_static = "1.4.0"
 libc = "0.2.139"
