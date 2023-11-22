@@ -19,7 +19,10 @@ use crate::instruction::INSTRUCTIONS;
 
 use std::env;
 use std::fs;
+use std::fs::File;
 use std::io::stdin;
+use std::io::Read;
+use std::io::Write;
 
 macro_rules! _assert_eq {
     ($a: expr, $b: expr) => {
@@ -51,31 +54,30 @@ static RUN_PROGRAM: i32 = 0b1000;
 static RUN_FLAG: i32 = RUN_PROGRAM;
 
 fn print_program(path: String) {
-    let code = fs::read(path).expect("Failed to read file");
-
-    for i in 0..code.len() {
-        println!("{}", code[i]);
+    let buffer = read_rom(path);
+    let mut skip = 0;
+    for i in 0..10 {
+        if skip > 0 {
+            skip -= 1;
+            continue;
+        }
+        if let Some(ins) = Instruction::look_up(buffer[i]) {
+            println!("{}{:#?}", buffer[i], ins.opcode);
+            skip = ins.length - 1;
+        } else {
+            println!("Unknown instruction: {}", buffer[i]);
+        }
     }
 }
 
-fn read_program_file(path: String, cpu: &mut Cpu) {
-    let code = fs::read(path).expect("Failed to read file");
+fn read_rom(path: String) -> Vec<u8> {
+    let mut file = File::open(&path).expect("File not found");
+    let metadata = fs::metadata(&path).expect("Failed to load metadata");
+    let mut buffer = vec![0; metadata.len() as usize];
+    file.read(&mut buffer)
+        .expect("Buffer overflow when reading file");
 
-    let mut has_data = false;
-    for i in 0..code.len() {
-        if has_data {
-            println!("{}", code[i]);
-            has_data = false;
-            cpu.write_to_memory(cpu.get_pc() - i as u16, code[i]);
-            continue;
-        }
-        if let Some(instruction) = Instruction::look_up(code[i]) {
-            has_data = instruction.length > 1;
-            println!("{}: {:#?}", i, instruction);
-        }
-        cpu.write_to_memory(cpu.get_pc() - i as u16, code[i]);
-    }
-    cpu.get_memory().print_memory_mnemonics();
+    buffer
 }
 
 fn write_program_file(path: String) {
@@ -87,6 +89,15 @@ fn write_program_file(path: String) {
     code.push(Instruction::byte_from_opcode(OpCode::SWAP(Target::A)).unwrap());
 
     fs::write(path, code).expect("Failed to write file");
+}
+
+fn dump_memory_to_file(path: String, buffer: &Vec<String>) {
+    let mut data = "".to_string();
+    for i in 0..buffer.len() {
+        data += (buffer[i].clone() + "\n").as_str();
+    }
+
+    fs::write(path, data).expect("Failed to dump memory");
 }
 
 fn main() {
@@ -120,18 +131,13 @@ fn main() {
 
         cpu.power_up();
 
-        // write_program_file("program.bin".to_string());
-        // read_program_file("roms/Tetris.gb".to_string(), &mut cpu);
+        // print_program("roms/Pokemon-Silver.gbc".to_string());
+        let program = read_rom("roms/Pokemon-Silver.gbc".to_string());
+        cpu.load_program(program);
+        let mut memory = vec![];
+        cpu.dump_memory(&mut memory);
 
-        print_program("roms/Tetris.gb".to_string());
-
-        // for i in 0..cpu.get_memory().get_size() {
-        //     if i % 20 == 0 {
-        //         let mut s = String::new();
-        //         stdin().read_line(&mut s).expect("Summit went wron");
-        //     }
-        //     println!("{:#x}:\t{:#x}", i, cpu.read_memory(i as u16));
-        // }
+        dump_memory_to_file("memory_dump.txt".to_string(), &memory);
 
         cpu.run();
 

@@ -122,6 +122,20 @@ impl Cpu {
         log!(self.memory.write_byte(0xFFFF, 0x00));
     }
 
+    pub fn load_program(&mut self, program: Vec<u8>) {
+        for i in 0..program.len() {
+            self.memory.write_byte(i as u16, program[i]);
+        }
+    }
+
+    pub fn print_memory(&self) {
+        self.memory.print_memory_readable();
+    }
+
+    pub fn dump_memory(&self, mut buffer: &mut Vec<String>) {
+        self.memory.dump_memory(&mut buffer);
+    }
+
     fn set_flags(&mut self, instruction: &Instruction, old_value: u8, new_value: u8) {
         match instruction.flags[ZERO_FLAG] {
             RESET => {

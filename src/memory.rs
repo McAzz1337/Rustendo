@@ -91,7 +91,51 @@ impl Memory {
         self.size
     }
 
-    pub fn print(&mut self) {
+    pub fn print_memory_readable(&self) {
+        let mut data_words = 0;
+        for i in 0..self.size {
+            if data_words > 0 {
+                print!("{}\t", self.memory[i]);
+                if data_words == 1 {
+                    println!();
+                }
+                data_words -= 1;
+            } else if let Some(ins) = Instruction::look_up(self.memory[i]) {
+                data_words = (ins.length - 1).max(0);
+
+                if data_words > 0 {
+                    print!("{}\t", Instruction::mnemonic_as_string(&self.memory[i]));
+                } else {
+                    println!("{}", Instruction::mnemonic_as_string(&self.memory[i]));
+                }
+            }
+        }
+    }
+
+    pub fn dump_memory(&self, buffer: &mut Vec<String>) {
+        let mut data_words = 0;
+        let mut line = "".to_string();
+        for i in 0..self.size {
+            if data_words > 0 {
+                line += self.memory[i].to_string().as_str();
+                if data_words == 1 {
+                    buffer.push(line.clone());
+                }
+                data_words -= 1;
+            } else if let Some(ins) = Instruction::look_up(self.memory[i]) {
+                data_words = ins.length;
+
+                if data_words > 0 {
+                    data_words -= 1;
+                    line = Instruction::mnemonic_as_string(&self.memory[i]) + "\t";
+                } else {
+                    buffer.push(Instruction::mnemonic_as_string(&self.memory[i]));
+                }
+            }
+        }
+    }
+
+    pub fn print(&self) {
         println!("MEMORY:");
         let mut has_data = false;
         for i in 0..self.size {
