@@ -4,25 +4,29 @@ extern crate lazy_static;
 pub mod cpu;
 pub mod instruction;
 pub mod memory;
-pub mod registers;
 pub mod utils;
 
-use crate::cpu::Cpu;
-use crate::instruction::OpCode;
-use crate::instruction::Target;
+use cpu::cpu::Cpu;
+use instruction::opcode::OpCode;
+use instruction::target::Target;
+use instruction::instruction::Instruction;
 use crate::instruction::*;
-use crate::memory::Memory;
-use crate::registers::Flag;
-use crate::registers::Registers;
+use memory::memory::Memory;
+use cpu::registers::{ Flag, Registers };
 
-use crate::instruction::INSTRUCTIONS;
+#[allow(unused_imports)] 
+use instruction::instruction::INSTRUCTIONS;
 
+#[allow(unused_imports)] 
 use std::env;
 use std::fs;
 use std::fs::File;
+#[allow(unused_imports)] 
 use std::io::stdin;
 use std::io::Read;
+#[allow(unused_imports)] 
 use std::io::Write;
+
 
 macro_rules! _assert_eq {
     ($a: expr, $b: expr) => {
@@ -53,6 +57,7 @@ static RUN_PROGRAM: i32 = 0b1000;
 
 static RUN_FLAG: i32 = RUN_PROGRAM;
 
+#[allow(dead_code)]
 fn print_program(path: String) {
     let buffer = read_rom(path);
     let mut skip = 0;
@@ -80,6 +85,7 @@ fn read_rom(path: String) -> Vec<u8> {
     buffer
 }
 
+#[allow(dead_code)]
 fn write_program_file(path: String) {
     let mut code: Vec<u8> = vec![];
 

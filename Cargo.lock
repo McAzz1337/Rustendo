@@ -3,18 +3,9 @@
 version = 3
 
 [[package]]
-name = "builder"
-version = "0.1.0"
-dependencies = [
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "gb"
 version = "0.1.0"
 dependencies = [
- "builder",
  "get_set",
  "lazy_static",
  "libc",
