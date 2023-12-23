@@ -1,4 +1,4 @@
-use crate::instruction::target::Target;
+use super::target::Target;
 use crate::utils::conversion;
 
 use lmg_offset::Offset;
@@ -214,14 +214,14 @@ impl Registers {
 
     pub fn register_as_bit_string(&self, reg: Target) -> String {
         match reg {
-            Target::A => return conversion::as_bit_string(self.a),
-            Target::B => return conversion::as_bit_string(self.b),
-            Target::C => return conversion::as_bit_string(self.c),
-            Target::D => return conversion::as_bit_string(self.d),
-            Target::E => return conversion::as_bit_string(self.e),
-            Target::F => return conversion::as_bit_string(self.f),
-            Target::L => return conversion::as_bit_string(self.l),
-            Target::H => return conversion::as_bit_string(self.h),
+            Target::A => return conversion::u8_as_bit_string(self.a),
+            Target::B => return conversion::u8_as_bit_string(self.b),
+            Target::C => return conversion::u8_as_bit_string(self.c),
+            Target::D => return conversion::u8_as_bit_string(self.d),
+            Target::E => return conversion::u8_as_bit_string(self.e),
+            Target::F => return conversion::u8_as_bit_string(self.f),
+            Target::L => return conversion::u8_as_bit_string(self.l),
+            Target::H => return conversion::u8_as_bit_string(self.h),
             _ => {
                 panic!("Unimplemented");
             }
@@ -230,14 +230,14 @@ impl Registers {
 
     pub fn register_as_hex_string(&self, reg: Target) -> String {
         match reg {
-            Target::A => return conversion::as_hex_string(self.a),
-            Target::B => return conversion::as_hex_string(self.b),
-            Target::C => return conversion::as_hex_string(self.c),
-            Target::D => return conversion::as_hex_string(self.d),
-            Target::E => return conversion::as_hex_string(self.e),
-            Target::F => return conversion::as_hex_string(self.f),
-            Target::L => return conversion::as_hex_string(self.l),
-            Target::H => return conversion::as_hex_string(self.h),
+            Target::A => return conversion::u8_as_hex_string(self.a),
+            Target::B => return conversion::u8_as_hex_string(self.b),
+            Target::C => return conversion::u8_as_hex_string(self.c),
+            Target::D => return conversion::u8_as_hex_string(self.d),
+            Target::E => return conversion::u8_as_hex_string(self.e),
+            Target::F => return conversion::u8_as_hex_string(self.f),
+            Target::L => return conversion::u8_as_hex_string(self.l),
+            Target::H => return conversion::u8_as_hex_string(self.h),
             _ => {
                 panic!("Unimplemented");
             }

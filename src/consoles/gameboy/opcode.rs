@@ -1,5 +1,5 @@
-use crate::target::Target;
-use crate::cpu::registers::Flag;
+use super::target::Target;
+use super::registers::Flag;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

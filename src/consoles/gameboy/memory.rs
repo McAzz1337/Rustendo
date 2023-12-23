@@ -1,5 +1,5 @@
-use crate::instruction::instruction::{ Instruction, INSTRUCTIONS };
-use crate::instruction::opcode::OpCode::EndOfProgram;
+use super::instruction::{ Instruction, INSTRUCTIONS };
+use super::opcode::OpCode::EndOfProgram;
 use crate::utils::conversion;
 
 pub const INTERRPUT_ENABLE: u16 = 0xFFFF;
@@ -79,11 +79,11 @@ impl Memory {
     }
 
     pub fn read_as_binary_string(&self, address: u16) -> String {
-        conversion::as_bit_string(self.memory[address as usize])
+        conversion::u8_as_bit_string(self.memory[address as usize])
     }
 
     pub fn read_as_hex_strign(&self, address: u16) -> String {
-        conversion::as_hex_string(self.memory[address as usize])
+        conversion::u8_as_hex_string(self.memory[address as usize])
     }
 
     pub fn get_size(&self) -> usize {
@@ -91,20 +91,29 @@ impl Memory {
     }
 
     pub fn print_memory_readable(&self) {
+        
         let mut data_words = 0;
+        
         for i in 0..self.size {
             if data_words > 0 {
+            
                 print!("{}\t", self.memory[i]);
                 if data_words == 1 {
+            
                     println!();
                 }
                 data_words -= 1;
-            } else if let Some(ins) = Instruction::look_up(self.memory[i]) {
+            } 
+            else if let Some(ins) = Instruction::look_up(self.memory[i]) {
+                
                 data_words = (ins.length - 1).max(0);
 
                 if data_words > 0 {
+                   
                     print!("{}\t", Instruction::mnemonic_as_string(&self.memory[i]));
-                } else {
+                } 
+                else {
+                
                     println!("{}", Instruction::mnemonic_as_string(&self.memory[i]));
                 }
             }

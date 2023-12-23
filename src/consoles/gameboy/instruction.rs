@@ -1,7 +1,7 @@
-use crate::opcode::OpCode;
-use crate::target::Target;
+use super::opcode::OpCode;
+use super::target::Target;
 
-use crate::cpu::registers::Flag;
+use super::registers::Flag;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;

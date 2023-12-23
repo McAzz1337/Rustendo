@@ -1,23 +1,21 @@
-use crate::instruction::target::Target;
+use super::target::Target;
 extern crate libc;
 
 #[allow(unused_imports)]
-use crate::instruction::instruction::{
+use super::instruction::{
     AFFECTED, CARRY_FLAG, HALF_CARRY_FLAG, NOT_AFFECTED, RESET, SET, SUB_FLAG, ZERO_FLAG,
 };
 
 #[allow(unused_imports)]
-use crate::cpu::registers::{CARRY_BIT_POS, HALF_CARRY_BIT_POS, SUB_BIT_POS, ZERO_BIT_POS};
+use super::registers::{CARRY_BIT_POS, HALF_CARRY_BIT_POS, SUB_BIT_POS, ZERO_BIT_POS};
 use std::mem;
 
-use crate::Flag;
-use crate::Instruction;
-use crate::Memory;
-use crate::OpCode;
-use crate::Registers;
+use super::registers::Flag;
+use super::instruction::Instruction;
+use super::memory::Memory;
+use super::opcode::OpCode;
+use super::registers::Registers;
 
-use crate::CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES;
-use crate::RUN_FLAG;
 
 use std::ptr;
 
@@ -30,30 +28,18 @@ macro_rules! log {
 
 macro_rules! panic_or_print {
     ($a: expr) => {
-        if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
-            println!($a);
-            return;
-        } else {
-            panic!($a);
-        }
+       
+        panic!($a);
     };
 
     ($a: expr, $b: expr) => {
-        if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
-            println!($a, $b);
-            return;
-        } else {
-            panic!($a, $b);
-        }
+       
+        panic!($a, $b);
     };
 
     ($a: expr, $b: expr, $c: expr) => {
-        if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
-            println!($a, $b, $c);
-            return;
-        } else {
-            panic!($a, $b, $c);
-        }
+        
+        panic!($a, $b, $c);
     };
 }
 
@@ -280,6 +266,7 @@ impl Cpu {
     }
 
     pub fn run(&mut self) {
+
         while self.tick() {}
     }
 
@@ -528,15 +515,8 @@ impl Cpu {
                 self.store(dst, src);
             }
             _ => {
-                if RUN_FLAG & CHECK_INSTRUCTION_IMPLEMNETATION_COMPLETENES != 0 {
-                    println!(
-                        "Unimplemented {:#?} : {:#x}",
-                        instruction.opcode,
-                        Instruction::byte_from_opcode(instruction.opcode).unwrap()
-                    );
-                } else {
-                    panic!("Unimplemented");
-                }
+                
+                panic!("Unimplemented");
             }
         }
 
