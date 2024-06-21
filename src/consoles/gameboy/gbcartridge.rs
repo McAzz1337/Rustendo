@@ -70,7 +70,7 @@ impl Cartridge for GbCartridge {
 
                 data_words -= 1;
             }
-            else if let Some(instruction) = Instruction::look_up(*i) {
+            else if let Some(instruction) = Instruction::look_up(i) {
                 
                 dump = dump + Instruction::mnemonic_as_string(i).as_str() + "\t";
                 data_words = (instruction.length as i8 - 1).max(0);

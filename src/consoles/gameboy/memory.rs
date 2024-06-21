@@ -1,8 +1,8 @@
-use super::instruction::{ Instruction, INSTRUCTIONS };
+use super::instruction::{Instruction, INSTRUCTIONS};
 use super::opcode::OpCode::EndOfProgram;
 use crate::utils::conversion;
 
-pub const INTERRPUT_ENABLE: u16 = 0xFFFF;
+pub const INTERRUPT_ENABLE: u16 = 0xFFFF;
 pub const INTERNAL_RAM: u16 = 0xFF80;
 pub const EMPTY_BUT_UNUSABLE_FOR_IO: u16 = 0xFF4C;
 pub const IO_PORTS: u16 = 0xFF00;
@@ -32,6 +32,7 @@ pub struct Memory {
     size: usize,
     memory: [u8; 0x10000],
 }
+
 impl Memory {
     pub fn new() -> Memory {
         let mut memory = Memory {
@@ -39,27 +40,25 @@ impl Memory {
             memory: [0; 0x10000],
         };
 
-        for i in 0..memory.size {
-            memory.write_byte(
-                i as u16,
-                Instruction::byte_from_opcode(EndOfProgram).unwrap(),
-            );
-        }
+        (0..memory.size).enumerate().for_each(|(i, x)| {
+            memory.write_byte(i as u16,
+                              Instruction::byte_from_opcode(EndOfProgram).unwrap());
+        });
 
-        for i in 0..NINTENDO_SPLASH_SCREEN.len() {
+        (0..NINTENDO_SPLASH_SCREEN.len()).enumerate().for_each(|(i, x)| {
             memory.write_byte(i as u16 + 104, NINTENDO_SPLASH_SCREEN[i as usize]);
-        }
+        });
 
         memory
     }
 
-    pub fn read_byte(&self, address: u16) -> u8 {
-        self.memory[address as usize]
+    pub fn read_byte(&self, address: u16) -> &u8 {
+        &self.memory[address as usize]
     }
 
     pub fn write_byte(&mut self, address: u16, byte: u8) {
         self.memory[address as usize] = byte;
-        if (address as usize + RAM_ECHO_OFFSET as usize) < self.size as usize {
+        if (address as usize + RAM_ECHO_OFFSET as usize) < self.size {
             self.memory[(address + RAM_ECHO_OFFSET) as usize] = byte;
         }
     }
@@ -82,7 +81,7 @@ impl Memory {
         conversion::u8_as_bit_string(self.memory[address as usize])
     }
 
-    pub fn read_as_hex_strign(&self, address: u16) -> String {
+    pub fn read_as_hex_string(&self, address: u16) -> String {
         conversion::u8_as_hex_string(self.memory[address as usize])
     }
 
@@ -91,89 +90,77 @@ impl Memory {
     }
 
     pub fn print_memory_readable(&self) {
-        
         let mut data_words = 0;
-        
-        for i in 0..self.size {
+
+        self.memory.enumerate().for_each(|(i, x) | {
             if data_words > 0 {
-            
-                print!("{}\t", self.memory[i]);
+                print!("{}\t", x);
                 if data_words == 1 {
-            
                     println!();
                 }
                 data_words -= 1;
-            } 
-            else if let Some(ins) = Instruction::look_up(self.memory[i]) {
-                
+            } else if let Some(ins) = Instruction::look_up(x) {
                 data_words = (ins.length - 1).max(0);
 
                 if data_words > 0 {
-                   
-                    print!("{}\t", Instruction::mnemonic_as_string(&self.memory[i]));
-                } 
-                else {
-                
-                    println!("{}", Instruction::mnemonic_as_string(&self.memory[i]));
+                    print!("{}\t", Instruction::mnemonic_as_string(x));
+                } else {
+                    println!("{}", Instruction::mnemonic_as_string(x));
                 }
             }
-        }
+        });
     }
 
     pub fn dump_memory(&self, buffer: &mut Vec<String>) {
         let mut data_words = 0;
         let mut line = "".to_string();
-        for i in 0..self.size {
+        self.memory.enumerate().for_each(|(i, x) | {
             if data_words > 0 {
-                line += self.memory[i].to_string().as_str();
+                line += x.to_string().as_str();
                 if data_words == 1 {
                     buffer.push(line.clone());
                 }
                 data_words -= 1;
-            } else if let Some(ins) = Instruction::look_up(self.memory[i]) {
+            } else if let Some(ins) = Instruction::look_up(x) {
                 data_words = ins.length;
 
                 if data_words > 0 {
                     data_words -= 1;
-                    line = Instruction::mnemonic_as_string(&self.memory[i]) + "\t";
+                    line = Instruction::mnemonic_as_string(x) + "\t";
                 } else {
-                    buffer.push(Instruction::mnemonic_as_string(&self.memory[i]));
+                    buffer.push(Instruction::mnemonic_as_string(x));
                 }
             }
-        }
+        });
     }
 
     pub fn print(&self) {
         println!("MEMORY:");
         let mut has_data = false;
-        for i in 0..self.size {
-            if self.memory[i]
-                == Instruction::byte_from_opcode(EndOfProgram).unwrap()
-            {
-                continue;
-            }
+        self.memory.iter().filter( |x| **x != Instruction::byte_from_opcode(EndOfProgram).unwrap())
+            .enumerate().for_each(|(i, x) | {
             if !has_data && INSTRUCTIONS.contains_key(&(i as u8)) {
-                println!("[{:#x}] :\t{:#x}", i, self.memory[i]);
+                println!("[{:#x}] :\t{:#x}", i, x);
                 if INSTRUCTIONS.get(&(i as u8)).unwrap().length > 1 {
                     has_data = true;
                 }
             } else {
-                println!("[{:#x}] :\t{}", i, self.memory[i]);
+                println!("[{:#x}] :\t{}", i, x);
                 has_data = false;
             }
-        }
+        });
         println!("--------------------------------");
     }
 
     pub fn print_memory_mnemonics(&self) {
         println!("MEMORY:");
         let mut data_words = 0;
-        for i in 0..self.size {
+        self.memory.iter().enumerate().for_each(|(i, x)| {
             if data_words > 0 {
-                println!("{:#x}:\t{}", i, self.memory[i]);
+                println!("{:#x}:\t{}", i, x);
                 data_words = data_words - 1;
             }
-            if let Some(instruction) = Instruction::look_up(self.memory[i]) {
+            if let Some(instruction) = Instruction::look_up(x) {
                 if instruction.length > 0 {
                     data_words = instruction.length - 1;
                 } else {
@@ -182,14 +169,14 @@ impl Memory {
                 println!(
                     "{:#x}:\t{}\t{:#x}",
                     i,
-                    Instruction::mnemonic_as_string(&self.memory[i]),
+                    Instruction::mnemonic_as_string(x),
                     self.memory[i]
                 );
             } else {
-                println!("{:#x}:\t{}", i, self.memory[i]);
+                println!("{:#x}:\t{}", i, x);
                 data_words = data_words - 1;
             }
-        }
+        });
     }
 }
 
@@ -197,9 +184,9 @@ impl Memory {
 fn test_memory() {
     let mut mem = Memory::new();
     mem.write_byte(RAM, 100);
-    assert!(mem.read_byte(RAM) == 100);
-    assert!(mem.read_byte(ECHO_OF_INTERNAL_RAM) == 100);
+    assert!(mem.read_byte(RAM) == *100);
+    assert!(mem.read_byte(ECHO_OF_INTERNAL_RAM) == *100);
     mem.write_byte(RAM + 40, 10);
-    assert!(mem.read_byte(RAM + 40) == 10);
-    assert!(mem.read_byte(ECHO_OF_INTERNAL_RAM + 40) == 10);
+    assert!(mem.read_byte(RAM + 40) == *10);
+    assert!(mem.read_byte(ECHO_OF_INTERNAL_RAM + 40) == *10);
 }

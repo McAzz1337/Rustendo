@@ -1,4 +1,5 @@
 use super::target::Target;
+
 extern crate libc;
 
 #[allow(unused_imports)]
@@ -15,7 +16,6 @@ use super::instruction::Instruction;
 use super::memory::Memory;
 use super::opcode::OpCode;
 use super::registers::Registers;
-
 
 use std::ptr;
 
@@ -110,9 +110,9 @@ impl Cpu {
     }
 
     pub fn load_program(&mut self, program: Vec<u8>) {
-        for i in 0..program.len() {
+        program.iter().enumerate().for_each( |(i, x)| {
             self.memory.write_byte(i as u16, program[i]);
-        }
+        });
     }
 
     pub fn print_memory(&self) {
@@ -266,7 +266,6 @@ impl Cpu {
     }
 
     pub fn run(&mut self) {
-
         while self.tick() {}
     }
 
@@ -278,7 +277,7 @@ impl Cpu {
         self.memory.write_byte(address, byte);
     }
 
-    pub fn read_memory(&self, address: u16) -> u8 {
+    pub fn read_memory(&self, address: u16) -> &u8 {
         self.memory.read_byte(address)
     }
 
@@ -300,7 +299,7 @@ impl Cpu {
     pub fn tick(&mut self) -> bool {
         let instruction_byte = self.memory.read_byte(self.pc);
 
-        if instruction_byte == Instruction::byte_from_opcode(OpCode::EndOfProgram).unwrap() {
+        if instruction_byte == *Instruction::byte_from_opcode(OpCode::EndOfProgram).unwrap() {
             return false;
         }
 
@@ -515,7 +514,6 @@ impl Cpu {
                 self.store(dst, src);
             }
             _ => {
-                
                 panic!("Unimplemented");
             }
         }
@@ -533,8 +531,8 @@ impl Cpu {
             Target::E => v = self.registers.e,
             Target::H => v = self.registers.h,
             Target::L => v = self.registers.l,
-            Target::HL => v = self.memory.read_byte(self.registers.combined_register(reg)),
-            Target::D8 => v = self.memory.read_byte(self.pc + 1),
+            Target::HL => v = *self.memory.read_byte(self.registers.combined_register(reg)),
+            Target::D8 => v = *self.memory.read_byte(self.pc + 1),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::ADC(reg)));
             }
@@ -572,12 +570,11 @@ impl Cpu {
             Target::L => v = self.registers.l,
             Target::H => v = self.registers.h,
             Target::HL => {
-                v = self
-                    .memory
+                v = *self.memory
                     .read_byte(self.registers.combined_register(Target::HL))
             }
             Target::D8 => {
-                v = self.memory.read_byte(self.pc + 1);
+                v = *self.memory.read_byte(self.pc + 1);
             }
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::ADD(src)));
@@ -613,7 +610,7 @@ impl Cpu {
             Target::BC => v = ((self.registers.b as u16) << 8) + self.registers.c as u16,
             Target::DE => v = ((self.registers.d as u16) << 8) + self.registers.e as u16,
             Target::SP => v = self.sp,
-            Target::R8 => v = self.memory.read_byte(self.pc + 1) as u16,
+            Target::R8 => v = *self.memory.read_byte(self.pc + 1) as u16,
             _ => {
                 panic_or_print!(
                     "Unimplemented {}",
@@ -736,8 +733,8 @@ impl Cpu {
 
             self.sp = self.sp.wrapping_sub(2);
 
-            self.pc = ((self.memory.read_byte(self.pc + 2) as u16) << 8)
-                | self.memory.read_byte(self.pc + 1) as u16;
+            self.pc = ((*self.memory.read_byte(self.pc + 2) as u16) << 8)
+                | *self.memory.read_byte(self.pc + 1) as u16;
 
             return true;
         }
@@ -757,7 +754,7 @@ impl Cpu {
             Target::H => v = self.registers.h as u16,
             Target::L => v = self.registers.l as u16,
             Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
-            Target::D8 => v = self.memory.read_byte(self.pc + 1) as u16,
+            Target::D8 => v = *self.memory.read_byte(self.pc + 1) as u16,
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::CP(reg)));
             }
@@ -801,7 +798,7 @@ impl Cpu {
             self.registers.set_flag(Flag::Carry, true);
         }
 
-        self.registers.a = (self.registers.a).wrapping_add(correction);
+        self.registers.a = self.registers.a.wrapping_add(correction);
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
         self.registers.set_flag(Flag::HalfCarry, false);
         // Do not call self.set_flags() for this instruction, since it is an edge case
@@ -824,15 +821,15 @@ impl Cpu {
                     .read_byte(self.registers.combined_register(target));
                 // self.registers.set_flag(Flag::HalfCarry, v == 0b10000);
                 let old = v;
-                v = v.wrapping_sub(1);
+                v = *v.wrapping_sub(1);
                 // self.registers.set_flag(Flag::Zero, v == 0);
                 // self.registers.set_flag(Flag::Sub, true);
                 self.memory
-                    .write_byte(self.registers.combined_register(target), v);
+                    .write_byte(self.registers.combined_register(target), *v);
                 self.set_flags(
                     Instruction::from_opcode(OpCode::DEC(target)).unwrap(),
-                    old,
-                    v,
+                    *old,
+                    *v,
                 );
                 return;
             }
@@ -898,15 +895,15 @@ impl Cpu {
                     .read_byte(self.registers.combined_register(target));
                 let old = v;
                 // self.registers.set_flag(Flag::HalfCarry, v == 0b1111);
-                v = v.wrapping_add(1);
+                v = *v.wrapping_add(1);
                 // self.registers.set_flag(Flag::Zero, v == 0);
                 // self.registers.set_flag(Flag::Sub, false);
                 self.memory
-                    .write_byte(self.registers.combined_register(target), v);
+                    .write_byte(self.registers.combined_register(target), *v);
                 self.set_flags(
                     Instruction::from_opcode(OpCode::INC(target)).unwrap(),
-                    old,
-                    v,
+                    *old,
+                    *v,
                 );
                 return;
             }
@@ -959,8 +956,8 @@ impl Cpu {
 
     fn jump_by_flag(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = ((self.memory.read_byte(self.pc + 2) as u16) << 8)
-                | self.memory.read_byte(self.pc + 1) as u16;
+            self.pc = ((*self.memory.read_byte(self.pc + 2) as u16) << 8)
+                | *self.memory.read_byte(self.pc + 1) as u16;
             return true;
         }
         false
@@ -968,7 +965,7 @@ impl Cpu {
 
     fn jr(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = (self.pc as i16 + (self.memory.read_byte(self.pc + 1) as i8) as i16) as u16;
+            self.pc = (self.pc as i16 + (*self.memory.read_byte(self.pc + 1) as i8) as i16) as u16;
             return true;
         }
 
@@ -1001,12 +998,12 @@ impl Cpu {
             Target::A8 => {
                 d = self
                     .memory
-                    .get_pointer(0xFF00 + self.memory.read_byte(self.pc + 1) as u16);
+                    .get_pointer(0xFF00 + *self.memory.read_byte(self.pc + 1) as u16);
             }
             Target::A16 => {
                 d = self.memory.get_pointer(
-                    (self.memory.read_byte(self.pc + 1) as u16) << 8
-                        | self.memory.read_byte(self.pc + 2) as u16,
+                    (*self.memory.read_byte(self.pc + 1) as u16) << 8
+                        | *self.memory.read_byte(self.pc + 2) as u16,
                 );
             }
             _ => {
@@ -1031,18 +1028,18 @@ impl Cpu {
             Target::A8 => {
                 v = self
                     .memory
-                    .get_pointer(0xFF00 + self.memory.read_byte(self.pc + 1) as u16);
+                    .get_pointer(0xFF00 + *self.memory.read_byte(self.pc + 1) as u16);
             }
             Target::A16 => {
                 v = self.memory.get_pointer(
-                    (self.memory.read_byte(self.pc + 1) as u16) << 8
-                        | self.memory.read_byte(self.pc + 2) as u16,
+                    (*self.memory.read_byte(self.pc + 1) as u16) << 8
+                        | *self.memory.read_byte(self.pc + 2) as u16,
                 );
             }
             Target::R8 => {
                 v = self
                     .memory
-                    .get_pointer(self.pc + self.memory.read_byte(self.pc + 1) as u16)
+                    .get_pointer(self.pc + *self.memory.read_byte(self.pc + 1) as u16)
             }
             Target::D8 => v = self.memory.get_pointer(self.pc + 1),
             _ => {
@@ -1067,32 +1064,32 @@ impl Cpu {
             Target::H => v = &mut (self.registers.h as u16),
             Target::L => v = &mut (self.registers.l as u16),
             Target::HL | Target::BC | Target::DE => {
-                v = &mut (self.memory.read_byte(self.registers.combined_register(src)) as u16)
+                v = &mut (*self.memory.read_byte(self.registers.combined_register(src)) as u16)
             }
             Target::A8 => {
-                v = &mut (self
+                v = &mut (*self
                     .memory
-                    .read_byte(0xFF00 + self.memory.read_byte(self.pc + 1) as u16)
+                    .read_byte(0xFF00 + *self.memory.read_byte(self.pc + 1) as u16)
                     as u16)
             }
             Target::A16 => {
-                v = &mut (self.memory.read_byte(
-                    (self.memory.read_byte(self.pc + 1) as u16)
-                        << 8 + self.memory.read_byte(self.pc + 2) as u16,
+                v = &mut (*self.memory.read_byte(
+                    (*self.memory.read_byte(self.pc + 1) as u16)
+                        << 8 + *self.memory.read_byte(self.pc + 2) as u16,
                 ) as u16)
             }
-            Target::D8 => v = &mut (self.memory.read_byte(self.pc + 1) as u16),
+            Target::D8 => v = &mut (*self.memory.read_byte(self.pc + 1) as u16),
             Target::D16 => unsafe {
                 v = libc::malloc(mem::size_of::<u16>()) as *mut u16;
 
-                *v = (((self.memory.read_byte(self.pc + 1) as u16) << 8)
-                    + self.memory.read_byte(self.pc + 2) as u16) as u16;
+                *v = ((*self.memory.read_byte(self.pc + 1) as u16) << 8)
+                    + *self.memory.read_byte(self.pc + 2) as u16;
             },
             Target::SP => v = &mut self.sp,
             Target::SP_R8 => {
-                v = &mut (self
+                v = &mut (*self
                     .memory
-                    .read_byte(self.sp + self.memory.read_byte(self.pc + 1) as u16)
+                    .read_byte(self.sp + *self.memory.read_byte(self.pc + 1) as u16)
                     as u16)
             }
             _ => {
@@ -1111,33 +1108,33 @@ impl Cpu {
             Target::HL | Target::BC | Target::DE => {
                 d =
                     self.memory.get_pointer(
-                        self.memory.read_byte(self.registers.combined_register(dst)) as u16,
+                        *self.memory.read_byte(*self.registers.combined_register(dst)) as u16,
                     ) as *mut u16
             }
             Target::A8 => {
-                d = &mut (self
+                d = &mut (*self
                     .memory
-                    .read_byte(0xFF00 + self.memory.read_byte(self.pc + 1) as u16)
+                    .read_byte(0xFF00 + *self.memory.read_byte(self.pc + 1) as u16)
                     as u16)
             }
             Target::A16 => {
-                d = &mut (self.memory.read_byte(
-                    ((self.memory.read_byte(self.pc + 1) as u16) << 8)
-                        + self.memory.read_byte(self.pc + 2) as u16,
+                d = &mut (*self.memory.read_byte(
+                    ((*self.memory.read_byte(self.pc + 1) as u16) << 8)
+                        + *self.memory.read_byte(self.pc + 2) as u16,
                 ) as u16)
             }
-            Target::D8 => v = &mut (self.memory.read_byte(self.pc + 1) as u16),
+            Target::D8 => v = &mut (*self.memory.read_byte(self.pc + 1) as u16),
             Target::D16 => unsafe {
                 d = libc::malloc(mem::size_of::<u16>()) as *mut u16;
 
-                *d = (((self.memory.read_byte(self.pc + 1) as u16) << 8)
-                    + self.memory.read_byte(self.pc + 2) as u16) as u16;
+                *d = ((*self.memory.read_byte(self.pc + 1) as u16) << 8)
+                    + *self.memory.read_byte(self.pc + 2) as u16;
             },
             Target::SP => d = &mut self.sp,
             Target::SP_R8 => {
-                d = &mut (self
+                d = &mut (*self
                     .memory
-                    .read_byte(self.sp + self.memory.read_byte(self.pc + 1) as u16)
+                    .read_byte(self.sp + *self.memory.read_byte(self.pc + 1) as u16)
                     as u16)
             }
             _ => {
@@ -1181,8 +1178,8 @@ impl Cpu {
     }
 
     fn pop(&mut self, target: Target) {
-        let v = ((self.memory.read_byte(self.sp + 1) as u16) << 8)
-            | self.memory.read_byte(self.sp + 2) as u16;
+        let v = ((*self.memory.read_byte(self.sp + 1) as u16) << 8)
+            | *self.memory.read_byte(self.sp + 2) as u16;
 
         self.sp = self.sp.wrapping_add(2);
 
@@ -1238,8 +1235,8 @@ impl Cpu {
 
     fn ret(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = ((self.memory.read_byte(self.sp + 1) as u16) << 8)
-                | (self.memory.read_byte(self.sp + 2) as u16);
+            self.pc = ((*self.memory.read_byte(self.sp + 1) as u16) << 8)
+                | (*self.memory.read_byte(self.sp + 2) as u16);
             self.sp = self.sp.wrapping_add(2);
 
             return true;
@@ -1462,8 +1459,8 @@ impl Cpu {
             Target::E => v = self.registers.e,
             Target::H => v = self.registers.h,
             Target::L => v = self.registers.l,
-            Target::HL => v = self.memory.read_byte(self.registers.combined_register(reg)),
-            Target::D8 => v = self.memory.read_byte(self.pc + 1),
+            Target::HL => v = *self.memory.read_byte(self.registers.combined_register(reg)),
+            Target::D8 => v = *self.memory.read_byte(self.pc + 1),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SBC(reg)));
             }
@@ -1481,7 +1478,7 @@ impl Cpu {
         // self.registers
         //     .set_flag(Flag::Zero, self.registers.a.lt(&(v + carry)));
 
-        self.registers.a = self.registers.a.wrapping_sub(v).wrapping_sub(carry) as u8;
+        self.registers.a = self.registers.a.wrapping_sub(v).wrapping_sub(carry);
 
         self.set_flags(
             Instruction::from_opcode(OpCode::SBC(reg)).unwrap(),
@@ -1629,8 +1626,8 @@ impl Cpu {
             Target::F => v = self.registers.f,
             Target::L => v = self.registers.l,
             Target::H => v = self.registers.h,
-            Target::HL => v = self.memory.read_byte(self.registers.combined_register(src)),
-            Target::D8 => v = self.memory.read_byte(self.pc + 1),
+            Target::HL => v = *self.memory.read_byte(self.registers.combined_register(src)),
+            Target::D8 => v = *self.memory.read_byte(self.pc + 1),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SUB(src)));
             }
@@ -1708,9 +1705,7 @@ impl Cpu {
 
     #[allow(unused_variables)]
     fn store(&mut self, dst: Target, src: Target) {
-
         if dst.is_16bit() {
-            
             self.store_16(dst, src);
             return;
         }
@@ -2057,8 +2052,8 @@ fn test_push_and_pop() {
 
     cpu.push(Target::HL);
 
-    assert!(cpu.memory.read_byte(cpu.sp + 1) == 0b10001000);
-    assert!(cpu.memory.read_byte(cpu.sp + 2) == 0b00010001);
+    assert!(*cpu.memory.read_byte(cpu.sp + 1) == 0b10001000);
+    assert!(*cpu.memory.read_byte(cpu.sp + 2) == 0b00010001);
 
     cpu.pop(Target::BC);
 
