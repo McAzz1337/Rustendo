@@ -18,6 +18,7 @@ pub struct Registers {
     pub e: u8,
     pub h: u8,
     pub l: u8,
+    pub acc: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,69 +44,77 @@ impl Registers {
             f: 0,
             l: 0,
             h: 0,
+            acc: 0,
         }
+    }
+
+    pub fn get_value(&self, src: Target) -> u8 {
+        return match src {
+            Target::A => self.a,
+            Target::B => self.b,
+            Target::C => self.b,
+            Target::D => self.b,
+            Target::E => self.b,
+            Target::F => self.b,
+            Target::H => self.b,
+            Target::L => self.b,
+            _ => panic!("Illegal register accessed")
+        };
+    }
+    pub fn get_address(&self, src: Target) -> u16 {
+        return match src {
+            Target::AF => self.combined_register(Target::AF),
+            Target::BC => self.combined_register(Target::BC),
+            Target::DE => self.combined_register(Target::DE),
+            Target::HL => self.combined_register(Target::HL),
+            _ => self.get_value(src) as u16
+        };
+    }
+
+    pub fn set_register(&mut self, dst: Target, value: u8) {
+        match dst {
+            Target::A => self.a = value,
+            Target::B => self.b = value,
+            Target::C => self.b = value,
+            Target::D => self.b = value,
+            Target::E => self.b = value,
+            Target::F => self.b = value,
+            Target::H => self.b = value,
+            Target::L => self.b = value,
+            _ => panic!("Illegal register accessed")
+        };
     }
 
     pub fn get_flag(&self, flag: Flag) -> bool {
-        match flag {
-            Flag::Zero => {
-                return (self.f >> ZERO_BIT_POS) == 1;
-            }
-            Flag::Carry => {
-                return (self.f & (1 << CARRY_BIT_POS)) >= 1;
-            }
-            Flag::HalfCarry => {
-                return (self.f & (1 << HALF_CARRY_BIT_POS)) >= 1;
-            }
-            Flag::Sub => {
-                return (self.f & (1 << SUB_BIT_POS)) >= 1;
-            }
-            Flag::NotZero => {
-                return (self.f >> ZERO_BIT_POS) == 0;
-            }
-            Flag::NotCarry => {
-                return (self.f & (1 << CARRY_BIT_POS)) == 0;
-            }
-            Flag::NotHalfCarry => {
-                return (self.f & (1 << HALF_CARRY_BIT_POS)) == 0;
-            }
-            Flag::NotSub => {
-                return (self.f & (1 << SUB_BIT_POS)) == 0;
-            }
-        }
+        return match flag {
+            Flag::Zero => self.f >> ZERO_BIT_POS == 1,
+            Flag::Carry => self.f & (1 << CARRY_BIT_POS) >= 1,
+            Flag::HalfCarry => self.f & (1 << HALF_CARRY_BIT_POS) >= 1,
+            Flag::Sub => self.f & (1 << SUB_BIT_POS) >= 1,
+            Flag::NotZero => self.f >> ZERO_BIT_POS == 0,
+            Flag::NotCarry => self.f & (1 << CARRY_BIT_POS) == 0,
+            Flag::NotHalfCarry => self.f & (1 << HALF_CARRY_BIT_POS) == 0,
+            Flag::NotSub => self.f & (1 << SUB_BIT_POS) == 0,
+        };
     }
 
     pub fn filter_flag(&self, flag: Flag) -> u8 {
-        match flag {
-            Flag::Zero => return (self.f & (1 << ZERO_BIT_POS)) >> ZERO_BIT_POS,
-            Flag::Carry => return (self.f & (1 << CARRY_BIT_POS)) >> CARRY_BIT_POS,
-            Flag::HalfCarry => return (self.f & (1 << HALF_CARRY_BIT_POS)) >> HALF_CARRY_BIT_POS,
-            Flag::Sub => return (self.f & (1 << SUB_BIT_POS)) >> SUB_BIT_POS,
-            _ => {
-                panic!("Unimplemented");
-            }
-        }
+        return match flag {
+            Flag::Zero => self.f & (1 << ZERO_BIT_POS) >> ZERO_BIT_POS,
+            Flag::Carry => self.f & (1 << CARRY_BIT_POS) >> CARRY_BIT_POS,
+            Flag::HalfCarry => self.f & (1 << HALF_CARRY_BIT_POS) >> HALF_CARRY_BIT_POS,
+            Flag::Sub => self.f & (1 << SUB_BIT_POS) >> SUB_BIT_POS,
+            _ => panic!("Unimplemented");
+        };
     }
 
     pub fn set_flag(&mut self, flag: Flag, v: bool) {
-        let mut mask;
-
-        match flag {
-            Flag::Zero => {
-                mask = 1 << ZERO_BIT_POS;
-            }
-            Flag::Carry => {
-                mask = 1 << CARRY_BIT_POS;
-            }
-            Flag::HalfCarry => {
-                mask = 1 << HALF_CARRY_BIT_POS;
-            }
-            Flag::Sub => {
-                mask = 1 << SUB_BIT_POS;
-            }
-            _ => {
-                panic!("Invalid flag as Input!");
-            }
+        let mut mask = match flag {
+            Flag::Zero => 1 << ZERO_BIT_POS,
+            Flag::Carry => 1 << CARRY_BIT_POS,
+            Flag::HalfCarry => 1 << HALF_CARRY_BIT_POS,
+            Flag::Sub => 1 << SUB_BIT_POS,
+            _ => panic!("Invalid flag as Input!");
         }
 
         if !v {
@@ -117,15 +126,11 @@ impl Registers {
     }
 
     pub fn set_flag_from_u8(&mut self, flag: Flag, bit: u8) {
-        if bit == 0 {
-            self.set_flag(flag, false);
-        } else {
-            self.set_flag(flag, true);
-        }
+        self.set_flag(flag, bit == 1);
     }
 
-    pub fn get_bit(&self, reg: Target, bit: &u32) -> bool {
-        let mask = 1 << bit;
+    pub fn get_bit(&self, reg: Target, bit: &u8) -> bool {
+        let mask: u8 = 1 << bit;
         match reg {
             Target::A => return (self.a & mask) >= 1,
             Target::B => return (self.b & mask) >= 1,
@@ -141,7 +146,7 @@ impl Registers {
         }
     }
 
-    pub fn set_bit(&mut self, reg: Target, bit: &u32, v: u8) {
+    pub fn set_bit(&mut self, reg: Target, bit: &u8, v: u8) {
         if v == 1 {
             let mask = v << bit;
             match reg {
@@ -159,7 +164,7 @@ impl Registers {
             }
         } else {
             let mut mask = 0b1111111;
-            mask = mask ^ (1 << bit);
+            mask = mask ^ (1u8 << bit);
             match reg {
                 Target::A => self.a = self.a & mask,
                 Target::B => self.b = self.b & mask,
@@ -213,31 +218,31 @@ impl Registers {
     }
 
     pub fn register_as_bit_string(&self, reg: Target) -> String {
-        match reg {
-            Target::A => return conversion::u8_as_bit_string(self.a),
-            Target::B => return conversion::u8_as_bit_string(self.b),
-            Target::C => return conversion::u8_as_bit_string(self.c),
-            Target::D => return conversion::u8_as_bit_string(self.d),
-            Target::E => return conversion::u8_as_bit_string(self.e),
-            Target::F => return conversion::u8_as_bit_string(self.f),
-            Target::L => return conversion::u8_as_bit_string(self.l),
-            Target::H => return conversion::u8_as_bit_string(self.h),
+        return match reg {
+            Target::A => conversion::u8_as_bit_string(self.a),
+            Target::B => conversion::u8_as_bit_string(self.b),
+            Target::C => conversion::u8_as_bit_string(self.c),
+            Target::D => conversion::u8_as_bit_string(self.d),
+            Target::E => conversion::u8_as_bit_string(self.e),
+            Target::F => conversion::u8_as_bit_string(self.f),
+            Target::L => conversion::u8_as_bit_string(self.l),
+            Target::H => conversion::u8_as_bit_string(self.h),
             _ => {
                 panic!("Unimplemented");
             }
-        }
+        };
     }
 
     pub fn register_as_hex_string(&self, reg: Target) -> String {
-        match reg {
-            Target::A => return conversion::u8_as_hex_string(self.a),
-            Target::B => return conversion::u8_as_hex_string(self.b),
-            Target::C => return conversion::u8_as_hex_string(self.c),
-            Target::D => return conversion::u8_as_hex_string(self.d),
-            Target::E => return conversion::u8_as_hex_string(self.e),
-            Target::F => return conversion::u8_as_hex_string(self.f),
-            Target::L => return conversion::u8_as_hex_string(self.l),
-            Target::H => return conversion::u8_as_hex_string(self.h),
+        return match reg {
+            Target::A => conversion::u8_as_hex_string(self.a),
+            Target::B => conversion::u8_as_hex_string(self.b),
+            Target::C => conversion::u8_as_hex_string(self.c),
+            Target::D => conversion::u8_as_hex_string(self.d),
+            Target::E => conversion::u8_as_hex_string(self.e),
+            Target::F => conversion::u8_as_hex_string(self.f),
+            Target::L => conversion::u8_as_hex_string(self.l),
+            Target::H => conversion::u8_as_hex_string(self.h),
             _ => {
                 panic!("Unimplemented");
             }
@@ -256,9 +261,9 @@ impl Registers {
     }
 
     pub fn is_16bit_target(&self, reg: Target) -> bool {
-        match reg {
-            Target::SP | Target::SP_R8 | Target::D16 => return true,
-            _ => return false,
+        return match reg {
+            Target::SP | Target::SP_R8 | Target::D16 => true,
+            _ => false,
         }
     }
 }
@@ -276,7 +281,6 @@ fn test_bit() {
 
 #[test]
 fn test_set_bit() {
-    
     let mut reg = Registers::new();
     reg.set_bit(Target::A, &0, 1);
     assert!(reg.a == 1);
