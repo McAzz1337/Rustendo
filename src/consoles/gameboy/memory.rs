@@ -1,5 +1,11 @@
-use super::instruction::{ Instruction, INSTRUCTIONS };
+use std::error::Error;
+
+use super::instruction::{Instruction, INSTRUCTIONS};
 use super::opcode::OpCode::EndOfProgram;
+use crate::consoles::addressable::Addressable;
+use crate::consoles::bus::{ReadDevice, WriteDevice};
+use crate::consoles::readable::Readable;
+use crate::consoles::writeable::Writeable;
 use crate::utils::conversion;
 
 pub const INTERRPUT_ENABLE: u16 = 0xFFFF;
@@ -47,19 +53,15 @@ impl Memory {
         }
 
         for i in 0..NINTENDO_SPLASH_SCREEN.len() {
-            memory.write_byte(i as u16 + 104, NINTENDO_SPLASH_SCREEN[i as usize]);
+            memory.write_byte(i as u16 + 104, NINTENDO_SPLASH_SCREEN[i]);
         }
 
         memory
     }
 
-    pub fn read_byte(&self, address: u16) -> u8 {
-        self.memory[address as usize]
-    }
-
     pub fn write_byte(&mut self, address: u16, byte: u8) {
         self.memory[address as usize] = byte;
-        if (address as usize + RAM_ECHO_OFFSET as usize) < self.size as usize {
+        if (address as usize + RAM_ECHO_OFFSET as usize) < self.size {
             self.memory[(address + RAM_ECHO_OFFSET) as usize] = byte;
         }
     }
@@ -91,29 +93,21 @@ impl Memory {
     }
 
     pub fn print_memory_readable(&self) {
-        
         let mut data_words = 0;
-        
+
         for i in 0..self.size {
             if data_words > 0 {
-            
                 print!("{}\t", self.memory[i]);
                 if data_words == 1 {
-            
                     println!();
                 }
                 data_words -= 1;
-            } 
-            else if let Some(ins) = Instruction::look_up(self.memory[i]) {
-                
-                data_words = (ins.length - 1).max(0);
+            } else if let Some(ins) = Instruction::look_up(self.memory[i]) {
+                data_words = ins.length - 1;
 
                 if data_words > 0 {
-                   
                     print!("{}\t", Instruction::mnemonic_as_string(&self.memory[i]));
-                } 
-                else {
-                
+                } else {
                     println!("{}", Instruction::mnemonic_as_string(&self.memory[i]));
                 }
             }
@@ -147,9 +141,7 @@ impl Memory {
         println!("MEMORY:");
         let mut has_data = false;
         for i in 0..self.size {
-            if self.memory[i]
-                == Instruction::byte_from_opcode(EndOfProgram).unwrap()
-            {
+            if self.memory[i] == Instruction::byte_from_opcode(EndOfProgram).unwrap() {
                 continue;
             }
             if !has_data && INSTRUCTIONS.contains_key(&(i as u8)) {
@@ -171,7 +163,7 @@ impl Memory {
         for i in 0..self.size {
             if data_words > 0 {
                 println!("{:#x}:\t{}", i, self.memory[i]);
-                data_words = data_words - 1;
+                data_words -= 1;
             }
             if let Some(instruction) = Instruction::look_up(self.memory[i]) {
                 if instruction.length > 0 {
@@ -187,9 +179,40 @@ impl Memory {
                 );
             } else {
                 println!("{:#x}:\t{}", i, self.memory[i]);
-                data_words = data_words - 1;
+                data_words -= 1;
             }
         }
+    }
+}
+
+impl Readable for Memory {
+    fn read(&self, address: u16) -> Result<u8, Box<dyn std::error::Error>> {
+        Ok(self.memory[address as usize])
+    }
+}
+
+impl ReadDevice for Memory {}
+
+impl Writeable for Memory {
+    fn write(&mut self, address: u16, data: u8) -> Result<(), Box<dyn Error>> {
+        self.memory[address as usize] = data;
+        Ok(())
+    }
+
+    fn write_16(&mut self, address: u16, data: u16) -> Result<(), Box<dyn Error>> {
+        let upper = (data >> 8) as u8;
+        let lower = (data & 0xFF) as u8;
+        self.memory[address as usize] = upper;
+        self.memory[(address + 1) as usize] = lower;
+        Ok(())
+    }
+}
+
+impl WriteDevice for Memory {}
+
+impl Addressable for Memory {
+    fn in_range(&self, address: u16) -> bool {
+        (0..=u16::MAX).contains(&address)
     }
 }
 
@@ -197,9 +220,9 @@ impl Memory {
 fn test_memory() {
     let mut mem = Memory::new();
     mem.write_byte(RAM, 100);
-    assert!(mem.read_byte(RAM) == 100);
-    assert!(mem.read_byte(ECHO_OF_INTERNAL_RAM) == 100);
+    assert!(mem.read(RAM).unwrap() == 100);
+    assert!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap() == 100);
     mem.write_byte(RAM + 40, 10);
-    assert!(mem.read_byte(RAM + 40) == 10);
-    assert!(mem.read_byte(ECHO_OF_INTERNAL_RAM + 40) == 10);
+    assert!(mem.read(RAM + 40).unwrap() == 10);
+    assert!(mem.read(ECHO_OF_INTERNAL_RAM + 40).unwrap() == 10);
 }

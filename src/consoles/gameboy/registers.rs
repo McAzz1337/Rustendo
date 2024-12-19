@@ -1,14 +1,12 @@
 use super::target::Target;
 use crate::utils::conversion;
 
-use lmg_offset::Offset;
-
 pub const ZERO_BIT_POS: u8 = 7;
 pub const CARRY_BIT_POS: u8 = 4;
 pub const HALF_CARRY_BIT_POS: u8 = 5;
 pub const SUB_BIT_POS: u8 = 6;
 
-#[derive(Offset, Debug)]
+#[derive(Debug)]
 pub struct Registers {
     pub a: u8,
     pub f: u8,
@@ -276,7 +274,6 @@ fn test_bit() {
 
 #[test]
 fn test_set_bit() {
-    
     let mut reg = Registers::new();
     reg.set_bit(Target::A, &0, 1);
     assert!(reg.a == 1);
