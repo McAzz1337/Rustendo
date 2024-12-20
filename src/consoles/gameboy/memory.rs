@@ -46,38 +46,17 @@ impl Memory {
         };
 
         for i in 0..memory.size {
-            memory.write_byte(
+            let _ = memory.write(
                 i as u16,
                 Instruction::byte_from_opcode(EndOfProgram).unwrap(),
             );
         }
 
         for i in 0..NINTENDO_SPLASH_SCREEN.len() {
-            memory.write_byte(i as u16 + 104, NINTENDO_SPLASH_SCREEN[i]);
+            let _ = memory.write(i as u16 + 104, NINTENDO_SPLASH_SCREEN[i]);
         }
 
         memory
-    }
-
-    pub fn write_byte(&mut self, address: u16, byte: u8) {
-        self.memory[address as usize] = byte;
-        if (address as usize + RAM_ECHO_OFFSET as usize) < self.size {
-            self.memory[(address + RAM_ECHO_OFFSET) as usize] = byte;
-        }
-    }
-
-    pub fn write_2_bytes(&mut self, address: u16, bytes: u16) {
-        self.memory[address as usize] = (bytes & 0b11111111) as u8;
-        self.memory[address as usize + 1] = ((bytes & 0b1111111100000000) >> 8) as u8;
-        if ((address + 1 + RAM_ECHO_OFFSET) as usize) < self.size {
-            self.memory[(address + RAM_ECHO_OFFSET) as usize] = (bytes & 0b11111111) as u8;
-            self.memory[(address + RAM_ECHO_OFFSET) as usize + 1] =
-                ((bytes & 0b1111111100000000) >> 8) as u8;
-        }
-    }
-
-    pub fn get_pointer(&mut self, address: u16) -> *mut u8 {
-        &mut self.memory[address as usize]
     }
 
     pub fn read_as_binary_string(&self, address: u16) -> String {
@@ -196,6 +175,7 @@ impl ReadDevice for Memory {}
 impl Writeable for Memory {
     fn write(&mut self, address: u16, data: u8) -> Result<(), Box<dyn Error>> {
         self.memory[address as usize] = data;
+        // self.memory[(address + RAM_ECHO_OFFSET) as usize] = data;
         Ok(())
     }
 
@@ -219,10 +199,10 @@ impl Addressable for Memory {
 #[test]
 fn test_memory() {
     let mut mem = Memory::new();
-    mem.write_byte(RAM, 100);
+    let _ = mem.write(RAM, 100);
     assert!(mem.read(RAM).unwrap() == 100);
     assert!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap() == 100);
-    mem.write_byte(RAM + 40, 10);
+    let _ = mem.write(RAM + 40, 10);
     assert!(mem.read(RAM + 40).unwrap() == 10);
     assert!(mem.read(ECHO_OF_INTERNAL_RAM + 40).unwrap() == 10);
 }
