@@ -26,16 +26,15 @@ pub enum Target {
 }
 
 impl Target {
-    
     pub fn is_16bit(&self) -> bool {
-
-        self == &Target::HL ||
-        self == &Target::AF ||
-        self == &Target::BC ||
-        self == &Target::DE ||
-        self == &Target::R16 ||
-        self == &Target::D16 ||
-        self == &Target::A16 ||
-        self == &Target::SP_R8
+        self == &Target::HL
+            || self == &Target::AF
+            || self == &Target::BC
+            || self == &Target::DE
+            || self == &Target::R16
+            || self == &Target::D16
+            || self == &Target::A16
+            || self == &Target::SP_R8
     }
 }
+

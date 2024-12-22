@@ -45,16 +45,16 @@ impl Memory {
             memory: [0; 0x10000],
         };
 
-        for i in 0..memory.size {
+        (0..memory.size).into_iter().for_each(|i| {
             let _ = memory.write(
                 i as u16,
                 Instruction::byte_from_opcode(EndOfProgram).unwrap(),
             );
-        }
+        });
 
-        for i in 0..NINTENDO_SPLASH_SCREEN.len() {
+        (0..NINTENDO_SPLASH_SCREEN.len()).into_iter().for_each(|i| {
             let _ = memory.write(i as u16 + 104, NINTENDO_SPLASH_SCREEN[i]);
-        }
+        });
 
         memory
     }
@@ -200,9 +200,9 @@ impl Addressable for Memory {
 fn test_memory() {
     let mut mem = Memory::new();
     let _ = mem.write(RAM, 100);
-    assert!(mem.read(RAM).unwrap() == 100);
-    assert!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap() == 100);
+    assert_eq!(mem.read(RAM).unwrap(), 100);
+    assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap(), 100);
     let _ = mem.write(RAM + 40, 10);
-    assert!(mem.read(RAM + 40).unwrap() == 10);
-    assert!(mem.read(ECHO_OF_INTERNAL_RAM + 40).unwrap() == 10);
+    assert_eq!(mem.read(RAM + 40).unwrap(), 10);
+    assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM + 40).unwrap(), 10);
 }

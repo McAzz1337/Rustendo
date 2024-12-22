@@ -6,8 +6,6 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::prelude::*;
 
-
-
 #[derive(Debug)]
 pub struct Instruction {
     pub opcode: OpCode,

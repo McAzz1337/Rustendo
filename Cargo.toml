@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 lazy_static = "1.4.0"
 libc = "0.2.139"
+rstest = "0.23.0"

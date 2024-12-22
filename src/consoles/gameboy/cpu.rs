@@ -12,7 +12,6 @@ use super::instruction::{
 
 #[allow(unused_imports)]
 use super::registers::{CARRY_BIT_POS, HALF_CARRY_BIT_POS, SUB_BIT_POS, ZERO_BIT_POS};
-use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -21,8 +20,6 @@ use super::memory::Memory;
 use super::opcode::OpCode;
 use super::registers::Flag;
 use super::registers::Registers;
-
-use std::ptr;
 
 macro_rules! log {
     ($a: expr) => {
@@ -130,9 +127,7 @@ impl Cpu {
                 self.registers.set_flag(Flag::Zero, true);
             }
             AFFECTED => {
-                if new_value == 0 {
-                    self.registers.set_flag(Flag::Zero, true);
-                }
+                self.registers.set_flag(Flag::Zero, new_value == 0);
             }
             _ => {}
         }
@@ -391,7 +386,7 @@ impl Cpu {
                 }
             }
             OpCode::JP => {
-                self.jump();
+                self.jp();
             }
             OpCode::JR(flag) => {
                 self.jr(flag);
@@ -400,11 +395,7 @@ impl Cpu {
                 self.jump_hl();
             }
             OpCode::JRUC => {
-                if self.registers.get_flag(Flag::Zero) {
-                    self.jr(Flag::Zero);
-                } else {
-                    self.jr(Flag::NotZero);
-                }
+                self.jruc();
             }
             OpCode::LD(dst, src) => {
                 if self.registers.is_16bit_target(dst) || self.registers.is_16bit_target(src) {
@@ -596,9 +587,9 @@ impl Cpu {
     #[allow(unused_assignments)]
     fn add_16(&mut self, dst: Target, src: Target) {
         let v: u16 = match src {
-            Target::HL => ((self.registers.h as u16) << 8) + self.registers.l as u16,
-            Target::BC => ((self.registers.b as u16) << 8) + self.registers.c as u16,
-            Target::DE => ((self.registers.d as u16) << 8) + self.registers.e as u16,
+            Target::HL => self.registers.combined_register(src),
+            Target::BC => self.registers.combined_register(src),
+            Target::DE => self.registers.combined_register(src),
             Target::SP => self.sp,
             Target::R8 => self.bus.read(self.pc + 1).unwrap() as u16,
             _ => {
@@ -915,8 +906,10 @@ impl Cpu {
         }
     }
 
-    fn jump(&mut self) {
-        self.pc = self.registers.combined_register(Target::HL);
+    fn jp(&mut self) {
+        let lower_byte = self.bus.read(self.pc + 1).unwrap() as u16;
+        let upper_byte = self.bus.read(self.pc + 2).unwrap() as u16;
+        self.pc = (upper_byte << 8) + lower_byte
     }
 
     fn jump_by_flag(&mut self, flag: Flag) -> bool {
@@ -927,6 +920,10 @@ impl Cpu {
         } else {
             false
         }
+    }
+
+    fn jruc(&mut self) {
+        self.pc = self.pc + self.bus.read(self.pc + 1).unwrap() as u16;
     }
 
     fn jr(&mut self, flag: Flag) -> bool {
@@ -987,9 +984,9 @@ impl Cpu {
             Target::F => self.registers.f = v,
             Target::L => self.registers.l = v,
             Target::H => self.registers.h = v,
-            Target::HL | Target::BC | Target::DE => {
-                let _ = self.bus.write(self.registers.combined_register(dst), v);
-            }
+            Target::HL => self.registers.set_combined_register(Target::HL, v as u16),
+            Target::BC => self.registers.set_combined_register(Target::BC, v as u16),
+            Target::DE => self.registers.set_combined_register(Target::DE, v as u16),
             Target::A8 => {
                 let _ = self
                     .bus
@@ -1083,6 +1080,7 @@ impl Cpu {
     fn or(&mut self, src: Target) {
         let old = self.registers.a;
         match src {
+            Target::A => self.registers.a |= self.registers.a,
             Target::B => self.registers.a |= self.registers.b,
             Target::C => self.registers.a |= self.registers.c,
             Target::D => self.registers.a |= self.registers.d,
@@ -1091,10 +1089,8 @@ impl Cpu {
             Target::L => self.registers.a |= self.registers.l,
             Target::H => self.registers.a |= self.registers.h,
             Target::HL => {
-                self.registers.a |= self
-                    .bus
-                    .read(self.registers.combined_register(src))
-                    .unwrap()
+                self.registers.a =
+                    (self.registers.a as u16 | self.registers.combined_register(Target::HL)) as u8
             }
             Target::D8 => self.registers.a |= self.bus.read(self.pc + 1).unwrap(),
             _ => {
@@ -1144,18 +1140,23 @@ impl Cpu {
     }
 
     fn res(&mut self, bit: u8, reg: Target) {
-        let mask = !(1 << bit);
-        match reg {
-            Target::A => self.registers.a &= mask,
-            Target::B => self.registers.b &= mask,
-            Target::C => self.registers.c &= mask,
-            Target::D => self.registers.d &= mask,
-            Target::E => self.registers.e &= mask,
-            Target::H => self.registers.h &= mask,
-            Target::L => self.registers.l &= mask,
-            // Target::HL => v = &mut self.registers.a,
-            _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RES(bit, reg)));
+        if reg == Target::HL {
+            let mask = !(1 << bit);
+            let v = self.registers.combined_register(Target::HL);
+            self.registers.set_combined_register(Target::HL, v & mask);
+        } else {
+            let mask = !(1 << bit);
+            match reg {
+                Target::A => self.registers.a &= mask,
+                Target::B => self.registers.b &= mask,
+                Target::C => self.registers.c &= mask,
+                Target::D => self.registers.d &= mask,
+                Target::E => self.registers.e &= mask,
+                Target::H => self.registers.h &= mask,
+                Target::L => self.registers.l &= mask,
+                _ => {
+                    panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RES(bit, reg)));
+                }
             }
         }
     }
@@ -1209,45 +1210,55 @@ impl Cpu {
     }
 
     fn rl(&mut self, reg: Target) {
+        let f = |old: u8, cpu: &mut Cpu| {
+            let new_carry = old >> 7;
+            let old_carry = if cpu.registers.get_flag(Flag::Carry) {
+                1
+            } else {
+                0
+            };
+            cpu.registers.set_flag_from_u8(Flag::Carry, new_carry);
+            (old << 1) | old_carry
+        };
         let (old, new) = match reg {
             Target::A => {
                 let old = self.registers.a;
-                self.registers.a = self.registers.a.rotate_left(1);
+                self.registers.a = f(self.registers.a, self);
                 (old, self.registers.a)
             }
             Target::B => {
                 let old = self.registers.b;
-                self.registers.b = self.registers.b.rotate_left(1);
+                self.registers.b = f(self.registers.b, self);
                 (old, self.registers.b)
             }
             Target::C => {
                 let old = self.registers.c;
-                self.registers.c = self.registers.c.rotate_left(1);
+                self.registers.c = f(self.registers.c, self);
                 (old, self.registers.c)
             }
             Target::D => {
                 let old = self.registers.d;
-                self.registers.d = self.registers.d.rotate_left(1);
+                self.registers.d = f(self.registers.d, self);
                 (old, self.registers.d)
             }
             Target::E => {
                 let old = self.registers.e;
-                self.registers.e = self.registers.e.rotate_left(1);
+                self.registers.e = f(self.registers.e, self);
                 (old, self.registers.e)
             }
             Target::F => {
                 let old = self.registers.f;
-                self.registers.f = self.registers.f.rotate_left(1);
+                self.registers.f = f(self.registers.f, self);
                 (old, self.registers.f)
             }
             Target::H => {
                 let old = self.registers.h;
-                self.registers.h = self.registers.h.rotate_left(1);
+                self.registers.h = f(self.registers.h, self);
                 (old, self.registers.h)
             }
             Target::L => {
                 let old = self.registers.l;
-                self.registers.l = self.registers.l.rotate_left(1);
+                self.registers.l = f(self.registers.l, self);
                 (old, self.registers.l)
             }
             _ => {
@@ -1287,45 +1298,58 @@ impl Cpu {
     }
 
     fn rr(&mut self, reg: Target) {
+        let f = |old: u8, cpu: &mut Cpu| {
+            let new_carry = old & 0b1;
+            let old_carry = if cpu.registers.get_flag(Flag::Carry) {
+                println!("carry 1");
+                1
+            } else {
+                println!("carry 0");
+                0
+            };
+            let new = (old >> 1) | (old_carry << 7);
+            cpu.registers.set_flag_from_u8(Flag::Carry, new_carry);
+            new
+        };
         let (old, new) = match reg {
             Target::A => {
                 let old = self.registers.a;
-                self.registers.a = self.registers.a.rotate_right(1);
+                self.registers.a = f(self.registers.a, self);
                 (old, self.registers.a)
             }
             Target::B => {
                 let old = self.registers.b;
-                self.registers.b = self.registers.b.rotate_right(1);
+                self.registers.b = f(self.registers.b, self);
                 (old, self.registers.b)
             }
             Target::C => {
                 let old = self.registers.c;
-                self.registers.c = self.registers.c.rotate_right(1);
+                self.registers.c = f(self.registers.c, self);
                 (old, self.registers.c)
             }
             Target::D => {
                 let old = self.registers.d;
-                self.registers.d = self.registers.d.rotate_right(1);
+                self.registers.d = f(self.registers.d, self);
                 (old, self.registers.d)
             }
             Target::E => {
                 let old = self.registers.e;
-                self.registers.e = self.registers.e.rotate_right(1);
+                self.registers.e = f(self.registers.e, self);
                 (old, self.registers.e)
             }
             Target::F => {
                 let old = self.registers.f;
-                self.registers.f = self.registers.f.rotate_right(1);
+                self.registers.f = f(self.registers.f, self);
                 (old, self.registers.f)
             }
             Target::H => {
                 let old = self.registers.h;
-                self.registers.h = self.registers.h.rotate_right(1);
+                self.registers.h = f(self.registers.h, self);
                 (old, self.registers.h)
             }
             Target::L => {
                 let old = self.registers.l;
-                self.registers.l = self.registers.l.rotate_right(1);
+                self.registers.l = f(self.registers.l, self);
                 (old, self.registers.l)
             }
             _ => {
@@ -1339,8 +1363,14 @@ impl Cpu {
     #[allow(unused_assignments)]
     fn rrc(&mut self, reg: Target) {
         let f = |old: u8, cpu: &mut Cpu| {
-            cpu.registers.set_flag(Flag::Carry, (old & 1) != 0);
-            let new = old.rotate_right(1);
+            let old_carry = if cpu.registers.get_flag(Flag::Carry) {
+                1
+            } else {
+                0
+            };
+            let new_carry = old & 1;
+            cpu.registers.set_flag(Flag::Carry, new_carry == 1);
+            let new = (old >> 1) | (old_carry << 7);
             cpu.registers.set_flag(Flag::Zero, new == 0);
             new
         };
@@ -1352,7 +1382,7 @@ impl Cpu {
             Target::E => self.registers.e = f(self.registers.e, self),
             Target::F => self.registers.f = f(self.registers.f, self),
             Target::H => self.registers.h = f(self.registers.h, self),
-            Target::L => self.registers.l = f(self.registers.a, self),
+            Target::L => self.registers.l = f(self.registers.l, self),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RRC(reg)));
             }
@@ -1544,10 +1574,7 @@ impl Cpu {
             Target::F => self.registers.f,
             Target::L => self.registers.l,
             Target::H => self.registers.h,
-            Target::HL => self
-                .bus
-                .read(self.registers.combined_register(src))
-                .unwrap(),
+            Target::HL => self.registers.combined_register(Target::HL) as u8,
             Target::D8 => self.bus.read(self.pc + 1).unwrap(),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SUB(src)));
@@ -1656,581 +1683,1259 @@ impl Cpu {
     }
 }
 
-#[test]
-fn test_adc() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.set_flag(Flag::Carry, true);
-    cpu.registers.a = 254;
-    cpu.registers.b = 1;
-    cpu.adc(Target::B);
-
-    assert!(cpu.registers.a == 0);
-}
-
-#[test]
-fn test_add() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 0;
-    cpu.registers.b = 5;
-    cpu.add(Target::B);
-    assert!(cpu.registers.a == 5);
-    assert!(!cpu.registers.get_flag(Flag::Zero));
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
-    assert!(!cpu.registers.get_flag(Flag::Sub));
-
-    cpu.registers.a = 255;
-    cpu.registers.b = 1;
-    cpu.add(Target::B);
-
-    assert!(cpu.registers.a == 0);
-    assert!(cpu.registers.get_flag(Flag::Zero));
-    assert!(cpu.registers.get_flag(Flag::Carry));
-    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
-    assert!(!cpu.registers.get_flag(Flag::Sub));
-}
-
-#[test]
-fn test_add16() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.b = 1;
-    cpu.registers.c = 0b10000000;
-
-    cpu.add_16(Target::HL, Target::BC);
-
-    eprintln!("h = {}\nl = {}", cpu.registers.h, cpu.registers.l);
-    assert!(cpu.registers.h == 1 && cpu.registers.l == 0b10000000);
-}
-
-#[test]
-fn test_and() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 3;
-    cpu.registers.b = 5;
-    cpu.and(Target::B);
-
-    assert!(cpu.registers.a == 1);
-}
-
-#[test]
-fn test_bit() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 0b10000000;
-    cpu.bit(7, Target::A);
-
-    assert!(!cpu.registers.get_flag(Flag::Zero));
-    assert!(!cpu.registers.get_flag(Flag::Sub));
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(cpu.registers.get_flag(Flag::HalfCarry));
-
-    cpu.registers.a = 0;
-    cpu.bit(7, Target::A);
-
-    assert!(cpu.registers.get_flag(Flag::Zero));
-    assert!(!cpu.registers.get_flag(Flag::Sub));
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(cpu.registers.get_flag(Flag::HalfCarry));
-}
-
-#[test]
-fn test_call_and_ret() {
-    let mut cpu = Cpu::new();
-
-    eprintln!("pc = {}", cpu.pc);
-    let address1 = cpu.pc + 10;
-    let address2 = cpu.pc;
-
-    cpu.bus.write(cpu.pc + 1, (address1 & 0b11111111) as u8);
-    cpu.bus
-        .write(cpu.pc + 2, ((address1 & 0b1111111100000000) >> 8) as u8);
-    assert!(cpu.call(Flag::NotZero));
-
-    assert!(cpu.pc == address1);
-
-    assert!(cpu.ret(Flag::NotZero));
-
-    eprintln!("pc = {}", cpu.pc);
-    assert!(cpu.pc == address2);
-}
-
-#[test]
-fn test_cpl() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 1;
-    cpu.cpl();
-    assert!(cpu.registers.a == 0b11111110);
-}
-
-#[test]
-fn test_dec() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 1;
-    cpu.dec(Target::A);
-
-    assert!(cpu.registers.a == 0);
-    assert!(cpu.registers.get_flag(Flag::Zero));
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
-    assert!(cpu.registers.get_flag(Flag::Sub));
-}
-
-#[test]
-fn test_dec_16() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.set_combined_register(Target::HL, 0b100000000);
-    cpu.dec_16(Target::HL);
-
-    assert!(cpu.registers.combined_register(Target::HL) == 0b11111111);
-}
-
-#[test]
-fn test_inc() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 0;
-    cpu.inc(Target::A);
-
-    assert!(cpu.registers.a == 1);
-    assert!(!cpu.registers.get_flag(Flag::Zero));
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
-    assert!(!cpu.registers.get_flag(Flag::Sub));
-}
-
-#[test]
-fn test_inc_16() {
-    let mut cpu = Cpu::new();
-
-    cpu.sp = 0;
-    cpu.inc_16(Target::SP);
-
-    assert!(cpu.sp == 1);
-}
-
-#[test]
-fn test_jump() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.set_combined_register(Target::HL, 100);
-    cpu.jump();
-
-    assert!(cpu.pc == 100);
-}
-
-#[test]
-fn test_jump_hl() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers
-        .set_combined_register(Target::HL, 0b0000001010001000);
-
-    cpu.jump_hl();
-
-    assert!(cpu.pc == 0b0000001010001000);
-}
-
-#[test]
-fn test_jump_by_flag() {
-    let mut cpu = Cpu::new();
-
-    cpu.zero_memory();
-
-    let initial = cpu.pc as u8;
-
-    cpu.registers.a = 5;
-    cpu.registers.b = 5;
-    cpu.bus.write(cpu.pc + 1, initial + 255);
-    cpu.bus.write(cpu.pc + 2, initial + 0);
-    cpu.sub(Target::B);
-    cpu.jump_by_flag(Flag::Zero);
-
-    assert!(cpu.pc as u8 == initial + 255);
-    cpu.reset_registers();
-
-    cpu.registers.b = 5;
-    cpu.bus.write(cpu.pc + 1, 0);
-    cpu.bus.write(cpu.pc + 2, 0);
-    cpu.add(Target::B);
-    cpu.jump_by_flag(Flag::NotZero);
-
-    assert!(cpu.pc == 0);
-    cpu.reset_registers();
-
-    cpu.registers.a = 200;
-    cpu.registers.b = 100;
-    cpu.bus.write(cpu.pc + 1, initial + 255);
-    cpu.bus.write(cpu.pc + 2, initial + 0);
-    cpu.add(Target::B);
-
-    cpu.jump_by_flag(Flag::Carry);
-
-    assert!(cpu.pc as u8 == initial + 255);
-    cpu.reset_registers();
-
-    cpu.registers.b = 100;
-    cpu.bus.write(cpu.pc + 1, 0);
-    cpu.bus.write(cpu.pc + 2, 0);
-    cpu.add(Target::B);
-
-    cpu.jump_by_flag(Flag::NotCarry);
-
-    assert!(cpu.pc == 0);
-}
-
-#[test]
-fn test_jr() {
-    let mut cpu = Cpu::new();
-
-    let mut initial = cpu.pc as u8;
-    cpu.write_to_memory(cpu.pc + 1, initial + 100);
-    cpu.registers.a = 5;
-    cpu.registers.b = 5;
-    cpu.sub(Target::B);
-
-    cpu.jr(Flag::Zero);
-
-    assert!(cpu.pc as u8 == initial + 100);
-    cpu.reset_registers();
-    initial = cpu.pc as u8;
-
-    cpu.write_to_memory(cpu.pc + 1, initial + 5);
-    cpu.registers.b = 5;
-    cpu.add(Target::B);
-
-    cpu.jr(Flag::NotZero);
-
-    assert!(cpu.pc as u8 == initial + 5);
-    cpu.reset_registers();
-    initial = cpu.pc as u8;
-
-    cpu.bus.write(cpu.pc + 1, initial + 100);
-    cpu.registers.a = 255;
-    cpu.registers.b = 20;
-    cpu.add(Target::B);
-
-    cpu.jr(Flag::Carry);
-
-    assert!(cpu.pc as u8 == initial + 100);
-    cpu.reset_registers();
-    initial = cpu.pc as u8;
-
-    cpu.bus.write(cpu.pc + 1, initial + 105);
-    cpu.registers.a = 100;
-    cpu.registers.b = 20;
-    cpu.add(Target::B);
-
-    cpu.jr(Flag::NotCarry);
-
-    assert!(cpu.pc as u8 == initial + 105);
-}
-
-#[test]
-fn test_load() {
-    let mut cpu = Cpu::new();
-    cpu.write_to_memory(
-        cpu.pc,
-        Instruction::byte_from_opcode(OpCode::LD(Target::A, Target::D8)).unwrap(),
-    );
-    cpu.write_to_memory(cpu.pc + 1, 100);
-    cpu.tick();
-    cpu.tick();
-    assert!(cpu.registers.a == 100);
-}
-
-#[test]
-fn test_or() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 3;
-    cpu.registers.b = 5;
-    cpu.or(Target::B);
-
-    assert!(cpu.registers.a == 7);
-}
-
-#[test]
-fn test_push_and_pop() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers
-        .set_combined_register(Target::HL, 0b1000100000010001);
-
-    cpu.push(Target::HL);
-
-    assert!(cpu.bus.read(cpu.sp + 1).unwrap() == 0b10001000);
-    assert!(cpu.bus.read(cpu.sp + 2).unwrap() == 0b00010001);
-
-    cpu.pop(Target::BC);
-
-    assert!(cpu.registers.combined_register(Target::BC) == 0b1000100000010001);
-}
-
-#[test]
-fn test_sub() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 10;
-    cpu.registers.b = 5;
-    cpu.sub(Target::B);
-
-    assert!(cpu.registers.a == 5);
-    assert!(!cpu.registers.get_flag(Flag::Zero));
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
-    assert!(cpu.registers.get_flag(Flag::Sub));
-
-    cpu.registers.a = 0;
-    cpu.registers.b = 1;
-    cpu.sub(Target::B);
-
-    assert!(cpu.registers.a == 255);
-    assert!(!cpu.registers.get_flag(Flag::Zero));
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
-    assert!(cpu.registers.get_flag(Flag::Sub));
-
-    cpu.registers.a = 5;
-    cpu.registers.b = 5;
-    cpu.sub(Target::B);
-
-    assert!(cpu.registers.a == 0);
-    assert!(cpu.registers.get_flag(Flag::Zero));
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(!cpu.registers.get_flag(Flag::HalfCarry));
-    assert!(cpu.registers.get_flag(Flag::Sub));
-}
-
-#[test]
-fn test_flags() {
-    let mut cpu = Cpu::new();
-
-    let carry = cpu.registers.get_flag(Flag::Carry);
-    cpu.registers.set_flag(Flag::Carry, !carry);
-    assert!(carry != cpu.registers.get_flag(Flag::Carry));
-
-    cpu.registers.set_flag(Flag::Carry, false);
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-
-    cpu.registers.set_flag(Flag::Carry, true);
-    assert!(cpu.registers.get_flag(Flag::Carry));
-}
-
-#[test]
-fn test_res() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 1;
-    cpu.res(0, Target::A);
-
-    assert!(cpu.registers.a == 0);
-}
-
-#[test]
-fn test_rl() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 1;
-    cpu.rl(Target::A);
-
-    assert!(cpu.registers.a == 2);
-
-    cpu.registers.a = 0b10000000;
-    cpu.rl(Target::A);
-
-    assert!(cpu.registers.a == 1);
-}
-
-#[test]
-fn test_rla() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 0b10000000;
-    cpu.rla();
-
-    assert!(cpu.registers.get_flag(Flag::Carry));
-    assert!(cpu.registers.a == 0);
-
-    cpu.rla();
-
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(cpu.registers.a == 1);
-}
-
-#[test]
-fn test_rlc() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.set_flag(Flag::Carry, true);
-    cpu.registers.a = 1;
-    cpu.rlc(Target::A);
-
-    assert_eq!(cpu.registers.a, 2);
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-
-    cpu.registers.a = 0b10000000;
-    cpu.rlc(Target::A);
-
-    assert!(cpu.registers.a == 1);
-    assert!(cpu.registers.get_flag(Flag::Carry));
-}
-
-#[test]
-fn test_rr() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 1;
-    cpu.rr(Target::A);
-
-    assert!(cpu.registers.a == 0b10000000);
-
-    cpu.registers.a = 2;
-    cpu.rr(Target::A);
-
-    assert!(cpu.registers.a == 1);
-}
-
-#[test]
-fn test_rra() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 1;
-    cpu.rra();
-
-    assert!(cpu.registers.get_flag(Flag::Carry));
-    assert!(cpu.registers.a == 0);
-
-    cpu.rra();
-
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-    assert!(cpu.registers.a == 0b10000000);
-}
-
-#[test]
-fn test_rrc() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.set_flag(Flag::Carry, true);
-    cpu.registers.a = 1;
-    cpu.rrc(Target::A);
-
-    assert!(cpu.registers.a == 0b10000000);
-    assert!(cpu.registers.get_flag(Flag::Carry));
-
-    cpu.rrc(Target::A);
-
-    assert!(cpu.registers.a == 0b01000000);
-    assert!(!cpu.registers.get_flag(Flag::Carry));
-}
-
-#[test]
-fn test_rrca() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 1;
-    cpu.rrca();
-
-    assert!(cpu.registers.get_flag(Flag::Carry));
-    assert!(cpu.registers.a == (1 << ZERO_BIT_POS));
-}
-
-#[test]
-fn test_sbc() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.set_flag(Flag::Carry, true);
-    cpu.registers.a = 1;
-    cpu.registers.b = 1;
-    cpu.sbc(Target::B);
-
-    assert!(cpu.registers.a == 0xFF);
-}
-
-#[test]
-fn test_set() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 0;
-    cpu.set(7, Target::A);
-
-    assert!(cpu.registers.a == 128);
-
-    cpu.registers.a = cpu.registers.a | 1;
-    assert!(cpu.registers.a == 129);
-}
-
-#[test]
-fn test_sl() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 1;
-    cpu.sl(Target::A);
-
-    assert!(cpu.registers.a == 2);
-
-    cpu.registers.a = 0b10000000;
-    cpu.sl(Target::A);
-
-    assert!(cpu.registers.a == 0);
-}
-
-#[test]
-fn test_sla() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 1;
-    cpu.sla(Target::A);
-
-    assert!(cpu.registers.a == 2);
-}
-
-#[test]
-fn test_sr() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 2;
-    cpu.srl(Target::A);
-
-    assert!(cpu.registers.a == 1);
-
-    cpu.srl(Target::A);
-
-    assert!(cpu.registers.a == 0);
-}
-
-#[test]
-fn test_sra() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 0b10000000;
-    cpu.sra(Target::A);
-
-    assert!(cpu.registers.a == 0b11000000);
-}
-
-#[test]
-fn test_swap() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 128 + 4;
-    cpu.swap(Target::A);
-    assert!(72 == cpu.registers.a);
-}
-
-#[test]
-fn test_xor() {
-    let mut cpu = Cpu::new();
-
-    cpu.registers.a = 3;
-    cpu.registers.b = 5;
-    cpu.xor(Target::B);
-
-    assert!(cpu.registers.a == 6);
+#[cfg(test)]
+mod tests {
+    use core::panic;
+
+    use rstest::rstest;
+
+    use crate::consoles::{
+        addressable,
+        gameboy::{
+            cpu::Cpu,
+            instruction::Instruction,
+            opcode::OpCode,
+            registers::{self, Flag, ZERO_BIT_POS},
+            target::Target,
+        },
+        readable::Readable,
+        writeable::Writeable,
+    };
+
+    #[rstest]
+    #[case(Target::B, true, 0)]
+    #[case(Target::B, false, 255)]
+    #[case(Target::C, true, 0)]
+    #[case(Target::C, false, 255)]
+    #[case(Target::D, true, 0)]
+    #[case(Target::D, false, 255)]
+    #[case(Target::E, true, 0)]
+    #[case(Target::E, false, 255)]
+    #[case(Target::H, true, 0)]
+    #[case(Target::H, false, 255)]
+    #[case(Target::L, true, 0)]
+    #[case(Target::L, false, 255)]
+    fn test_adc(#[case] dst: Target, #[case] carry: bool, #[case] ecxpected: u8) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.set_flag(Flag::Carry, carry);
+        cpu.registers.a = 254;
+        match dst {
+            Target::B => cpu.registers.b = 1,
+            Target::C => cpu.registers.c = 1,
+            Target::D => cpu.registers.d = 1,
+            Target::E => cpu.registers.e = 1,
+            Target::H => cpu.registers.h = 1,
+            Target::L => cpu.registers.l = 1,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.adc(dst);
+
+        assert_eq!(cpu.registers.a, ecxpected);
+    }
+
+    #[rstest]
+    #[case(Target::B, 5)]
+    #[case(Target::C, 5)]
+    #[case(Target::D, 5)]
+    #[case(Target::E, 5)]
+    #[case(Target::H, 5)]
+    #[case(Target::L, 5)]
+    fn test_add(#[case] src: Target, #[case] expected: u8) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = 0;
+        match src {
+            Target::B => cpu.registers.b = expected,
+            Target::C => cpu.registers.c = expected,
+            Target::D => cpu.registers.d = expected,
+            Target::E => cpu.registers.e = expected,
+            Target::H => cpu.registers.h = expected,
+            Target::L => cpu.registers.l = expected,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.add(src);
+        assert_eq!(cpu.registers.a, expected);
+        assert!(!cpu.registers.get_flag(Flag::Zero));
+        assert!(!cpu.registers.get_flag(Flag::Carry));
+        assert!(!cpu.registers.get_flag(Flag::HalfCarry));
+        assert!(!cpu.registers.get_flag(Flag::Sub));
+
+        cpu.registers.a = 255;
+        match src {
+            Target::B => cpu.registers.b = 1,
+            Target::C => cpu.registers.c = 1,
+            Target::D => cpu.registers.d = 1,
+            Target::E => cpu.registers.e = 1,
+            Target::F => cpu.registers.f = 1,
+            Target::H => cpu.registers.h = 1,
+            Target::L => cpu.registers.l = 1,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.add(src);
+
+        assert_eq!(cpu.registers.a, 0);
+        assert!(cpu.registers.get_flag(Flag::Zero));
+        assert!(cpu.registers.get_flag(Flag::Carry));
+        assert!(!cpu.registers.get_flag(Flag::HalfCarry));
+        assert!(!cpu.registers.get_flag(Flag::Sub));
+    }
+
+    #[rstest]
+    #[case(Target::BC, 1, 0b10000000, Target::HL, 1, 0b10000000)]
+    #[case(Target::DE, 1, 0b10000000, Target::HL, 1, 0b10000000)]
+    #[case(Target::HL, 1, 0b10000000, Target::HL, 3, 0b00000000)]
+    #[case(Target::SP, 1, 0b10000000, Target::HL, 1, 0b10000000)]
+    fn test_add16(
+        #[case] src: Target,
+        #[case] upper_byte: u8,
+        #[case] lower_byte: u8,
+        #[case] dst: Target,
+        #[case] expeced_upper: u8,
+        #[case] expected_lower: u8,
+    ) {
+        let mut cpu = Cpu::new();
+
+        match src {
+            Target::BC => {
+                cpu.registers.b = upper_byte;
+                cpu.registers.c = lower_byte;
+            }
+            Target::DE => {
+                cpu.registers.d = upper_byte;
+                cpu.registers.e = lower_byte;
+            }
+            Target::HL => {
+                cpu.registers.h = upper_byte;
+                cpu.registers.l = lower_byte;
+            }
+            Target::SP => cpu.sp = ((upper_byte as u16) << 8) + lower_byte as u16,
+            _ => panic!("Unsupported register"),
+        }
+
+        cpu.add_16(dst, src);
+
+        match dst {
+            Target::HL => {
+                assert_eq!(cpu.registers.h, expeced_upper);
+                assert_eq!(cpu.registers.l, expected_lower);
+            }
+            Target::SP => {
+                assert_eq!((cpu.sp >> 8) as u8, expeced_upper);
+                assert_eq!((cpu.sp & 0xFF) as u8, expected_lower);
+            }
+            _ => panic!("Unsupported register"),
+        }
+    }
+
+    #[rstest]
+    #[case(3, Target::B, 5, 1, false)]
+    #[case(2, Target::B, 5, 0, true)]
+    #[case(2, Target::B, 6, 2, false)]
+    #[case(3, Target::C, 5, 1, false)]
+    #[case(2, Target::C, 5, 0, true)]
+    #[case(3, Target::C, 6, 2, false)]
+    #[case(3, Target::D, 5, 1, false)]
+    #[case(2, Target::D, 5, 0, true)]
+    #[case(2, Target::D, 6, 2, false)]
+    #[case(3, Target::E, 5, 1, false)]
+    #[case(2, Target::E, 5, 0, true)]
+    #[case(2, Target::E, 6, 2, false)]
+    #[case(3, Target::H, 5, 1, false)]
+    #[case(2, Target::H, 5, 0, true)]
+    #[case(2, Target::H, 6, 2, false)]
+    #[case(3, Target::L, 5, 1, false)]
+    #[case(2, Target::L, 5, 0, true)]
+    #[case(2, Target::L, 6, 2, false)]
+    fn test_and(
+        #[case] a_value: u8,
+        #[case] src: Target,
+        #[case] src_value: u8,
+        #[case] expected: u8,
+        #[case] expected_zero_flag: bool,
+    ) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = a_value;
+        match src {
+            Target::B => cpu.registers.b = src_value,
+            Target::C => cpu.registers.c = src_value,
+            Target::D => cpu.registers.d = src_value,
+            Target::E => cpu.registers.e = src_value,
+            Target::H => cpu.registers.h = src_value,
+            Target::L => cpu.registers.l = src_value,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.and(src);
+
+        assert_eq!(cpu.registers.a, expected);
+        assert_eq!(cpu.registers.get_flag(Flag::Zero), expected_zero_flag);
+        assert!(!cpu.registers.get_flag(Flag::Sub));
+        assert!(cpu.registers.get_flag(Flag::HalfCarry));
+        assert!(!cpu.registers.get_flag(Flag::Carry));
+    }
+
+    #[rstest]
+    #[case(0b10000000, 7, Target::A, false, false, false, true)]
+    #[case(0b00000000, 7, Target::A, true, false, false, true)]
+    #[case(0b10000000, 7, Target::B, false, false, false, true)]
+    #[case(0b00000000, 7, Target::B, true, false, false, true)]
+    #[case(0b10000000, 7, Target::C, false, false, false, true)]
+    #[case(0b00000000, 7, Target::C, true, false, false, true)]
+    #[case(0b10000000, 7, Target::D, false, false, false, true)]
+    #[case(0b00000000, 7, Target::D, true, false, false, true)]
+    #[case(0b10000000, 7, Target::E, false, false, false, true)]
+    #[case(0b00000000, 7, Target::E, true, false, false, true)]
+    #[case(0b10000000, 7, Target::H, false, false, false, true)]
+    #[case(0b00000000, 7, Target::H, true, false, false, true)]
+    #[case(0b10000000, 7, Target::L, false, false, false, true)]
+    #[case(0b00000000, 7, Target::L, true, false, false, true)]
+    fn test_bit(
+        #[case] reg_value1: u8,
+        #[case] bit_pos: u8,
+        #[case] src: Target,
+        #[case] expected_zero_flag: bool,
+        #[case] expected_sub_flag: bool,
+        #[case] expected_carry_flag: bool,
+        #[case] expected_half_carry_flag: bool,
+    ) {
+        let mut cpu = Cpu::new();
+
+        match src {
+            Target::A => cpu.registers.a = reg_value1,
+            Target::B => cpu.registers.b = reg_value1,
+            Target::C => cpu.registers.c = reg_value1,
+            Target::D => cpu.registers.d = reg_value1,
+            Target::E => cpu.registers.e = reg_value1,
+            Target::H => cpu.registers.h = reg_value1,
+            Target::L => cpu.registers.l = reg_value1,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.bit(bit_pos, src);
+
+        assert_eq!(cpu.registers.get_flag(Flag::Zero), expected_zero_flag);
+        assert_eq!(cpu.registers.get_flag(Flag::Sub), expected_sub_flag);
+        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag);
+        assert_eq!(
+            cpu.registers.get_flag(Flag::HalfCarry),
+            expected_half_carry_flag
+        );
+    }
+
+    #[test]
+    fn test_call_and_ret() {
+        let mut cpu = Cpu::new();
+
+        eprintln!("pc = {}", cpu.pc);
+        let address1 = cpu.pc + 10;
+        let address2 = cpu.pc;
+
+        let _ = cpu.bus.write(cpu.pc + 1, (address1 & 0b11111111) as u8);
+        let _ = cpu
+            .bus
+            .write(cpu.pc + 2, ((address1 & 0b1111111100000000) >> 8) as u8);
+        assert!(cpu.call(Flag::NotZero));
+        assert_eq!(cpu.pc, address1);
+
+        assert!(cpu.ret(Flag::NotZero));
+        assert_eq!(cpu.pc, address2);
+    }
+
+    #[rstest]
+    #[case(1, 0b11111110)]
+    #[case(2, 0b11111101)]
+    #[case(3, 0b11111100)]
+    #[case(4, 0b11111011)]
+    #[case(8, 0b11110111)]
+    #[case(16, 0b11101111)]
+    #[case(32, 0b11011111)]
+    #[case(64, 0b10111111)]
+    #[case(128, 0b01111111)]
+    fn test_cpl(#[case] a_value: u8, #[case] expected: u8) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = a_value;
+        cpu.cpl();
+        assert_eq!(cpu.registers.a, expected);
+        //Zero and Carry flag are not affected, thus will be 0 because they are initialised to 0
+        assert!(!cpu.registers.get_flag(Flag::Zero));
+        assert!(cpu.registers.get_flag(Flag::Sub));
+        assert!(cpu.registers.get_flag(Flag::HalfCarry));
+        assert!(!cpu.registers.get_flag(Flag::Carry));
+    }
+
+    #[rstest]
+    #[case(1, Target::A, 1, 0, true, true, false, false)]
+    #[case(1, Target::B, 1, 0, true, true, false, false)]
+    #[case(1, Target::C, 1, 0, true, true, false, false)]
+    #[case(1, Target::D, 1, 0, true, true, false, false)]
+    #[case(1, Target::E, 1, 0, true, true, false, false)]
+    #[case(1, Target::H, 1, 0, true, true, false, false)]
+    #[case(1, Target::L, 1, 0, true, true, false, false)]
+    fn test_dec(
+        #[case] a_value: u8,
+        #[case] reg: Target,
+        #[case] reg_value: u8,
+        #[case] expected: u8,
+        #[case] expected_zero_flag: bool,
+        #[case] expected_sub_flag: bool,
+        #[case] expected_half_carry_flag: bool,
+        #[case] expected_carry_flag: bool,
+    ) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = a_value;
+        match reg {
+            Target::A => {}
+            Target::B => cpu.registers.b = reg_value,
+            Target::C => cpu.registers.c = reg_value,
+            Target::D => cpu.registers.d = reg_value,
+            Target::E => cpu.registers.e = reg_value,
+            Target::H => cpu.registers.h = reg_value,
+            Target::L => cpu.registers.l = reg_value,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.dec(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+
+        assert_eq!(result, expected);
+        assert_eq!(cpu.registers.get_flag(Flag::Zero), expected_zero_flag);
+        assert_eq!(cpu.registers.get_flag(Flag::Sub), expected_sub_flag);
+        assert_eq!(
+            cpu.registers.get_flag(Flag::HalfCarry),
+            expected_half_carry_flag
+        );
+        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag);
+    }
+
+    #[rstest]
+    #[case(0b100000000, Target::HL, 0b11111111)]
+    #[case(0b100000000, Target::BC, 0b11111111)]
+    #[case(0b100000000, Target::DE, 0b11111111)]
+    #[case(0b100000000, Target::SP, 0b11111111)]
+    fn test_dec_16(#[case] reg_value: u16, #[case] reg: Target, #[case] expected: u16) {
+        let mut cpu = Cpu::new();
+
+        if reg == Target::SP {
+            cpu.sp = reg_value;
+        } else {
+            cpu.registers.set_combined_register(reg, reg_value);
+        }
+        cpu.dec_16(reg);
+
+        if reg == Target::SP {
+            assert_eq!(cpu.sp, expected);
+        } else {
+            assert_eq!(cpu.registers.combined_register(reg), expected);
+        }
+    }
+
+    #[rstest]
+    #[case(0, Target::A, 1, false, false, false, false)]
+    #[case(255, Target::A, 0, true, false, false, false)]
+    #[case(0, Target::B, 1, false, false, false, false)]
+    #[case(255, Target::B, 0, true, false, false, false)]
+    #[case(0, Target::C, 1, false, false, false, false)]
+    #[case(255, Target::C, 0, true, false, false, false)]
+    #[case(0, Target::D, 1, false, false, false, false)]
+    #[case(255, Target::D, 0, true, false, false, false)]
+    #[case(0, Target::E, 1, false, false, false, false)]
+    #[case(255, Target::E, 0, true, false, false, false)]
+    #[case(0, Target::H, 1, false, false, false, false)]
+    #[case(255, Target::H, 0, true, false, false, false)]
+    #[case(0, Target::L, 1, false, false, false, false)]
+    #[case(255, Target::L, 0, true, false, false, false)]
+    fn test_inc(
+        #[case] reg_value: u8,
+        #[case] reg: Target,
+        #[case] expected: u8,
+        #[case] expected_zero_flag: bool,
+        #[case] expected_sub_flag: bool,
+        #[case] expected_half_carry_flag: bool,
+        #[case] expected_carry_flag: bool,
+    ) {
+        let mut cpu = Cpu::new();
+        match reg {
+            Target::A => cpu.registers.a = reg_value,
+            Target::B => cpu.registers.b = reg_value,
+            Target::C => cpu.registers.c = reg_value,
+            Target::D => cpu.registers.d = reg_value,
+            Target::E => cpu.registers.e = reg_value,
+            Target::H => cpu.registers.h = reg_value,
+            Target::L => cpu.registers.l = reg_value,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.inc(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+
+        assert_eq!(result, expected);
+        assert_eq!(cpu.registers.get_flag(Flag::Zero), expected_zero_flag);
+        assert_eq!(cpu.registers.get_flag(Flag::Sub), expected_sub_flag);
+        assert_eq!(
+            cpu.registers.get_flag(Flag::HalfCarry),
+            expected_half_carry_flag
+        );
+        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag);
+    }
+
+    #[rstest]
+    #[case(0, Target::HL, 1)]
+    #[case(0xFFFF, Target::HL, 0)]
+    #[case(0, Target::BC, 1)]
+    #[case(0xFFFF, Target::BC, 0)]
+    #[case(0, Target::DE, 1)]
+    #[case(0xFFFF, Target::DE, 0)]
+    #[case(0, Target::SP, 1)]
+    #[case(0xFFFF, Target::SP, 0)]
+    fn test_inc_16(#[case] reg_value: u16, #[case] reg: Target, #[case] expected: u16) {
+        let mut cpu = Cpu::new();
+        if reg == Target::SP {
+            cpu.sp = reg_value;
+        } else {
+            match reg {
+                Target::HL => cpu.registers.set_combined_register(Target::HL, reg_value),
+                Target::BC => cpu.registers.set_combined_register(Target::BC, reg_value),
+                Target::DE => cpu.registers.set_combined_register(Target::DE, reg_value),
+                _ => panic!("Unsupported register"),
+            }
+        }
+        cpu.inc_16(reg);
+
+        let result = if reg == Target::SP {
+            cpu.sp
+        } else {
+            match reg {
+                Target::HL => cpu.registers.combined_register(Target::HL),
+                Target::BC => cpu.registers.combined_register(Target::BC),
+                Target::DE => cpu.registers.combined_register(Target::DE),
+                _ => panic!("Unsupported register"),
+            }
+        };
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_jump() {
+        let mut cpu = Cpu::new();
+
+        let address = 100_u16;
+        let _ = cpu.bus.write(cpu.pc + 1, (address & 0xFF) as u8);
+        let _ = cpu.bus.write(cpu.pc + 2, (address >> 8) as u8);
+        cpu.jp();
+
+        assert_eq!(cpu.pc, 100);
+    }
+
+    #[test]
+    fn test_jump_hl() {
+        let mut cpu = Cpu::new();
+
+        cpu.registers
+            .set_combined_register(Target::HL, 0b0000001010001000);
+
+        cpu.jump_hl();
+
+        assert_eq!(cpu.pc, 0b0000001010001000);
+    }
+
+    #[rstest]
+    #[case(Flag::Zero, true, Flag::Zero)]
+    #[case(Flag::Zero, false, Flag::NotZero)]
+    #[case(Flag::Carry, true, Flag::Carry)]
+    #[case(Flag::Carry, false, Flag::NotCarry)]
+    fn test_jump_by_flag(
+        #[case] flag_to_set: Flag,
+        #[case] flag_value: bool,
+        #[case] jump_flag: Flag,
+    ) {
+        let mut cpu = Cpu::new();
+
+        cpu.zero_memory();
+
+        let initial = cpu.pc as u8;
+
+        let _ = cpu.bus.write(cpu.pc + 1, initial + 255);
+        let _ = cpu.bus.write(cpu.pc + 2, initial);
+        cpu.registers.set_flag(flag_to_set, flag_value);
+        cpu.jump_by_flag(jump_flag);
+
+        assert!(cpu.pc as u8 == initial + 255);
+    }
+
+    #[test]
+    fn test_jruc() {
+        let mut cpu = Cpu::new();
+
+        let initial = cpu.pc as u8;
+        cpu.write_to_memory(cpu.pc + 1, initial + 100);
+        cpu.jruc();
+
+        assert_eq!(cpu.pc as u8, initial + 100);
+    }
+
+    #[rstest]
+    #[case(Flag::Zero, true, Flag::Zero)]
+    #[case(Flag::Zero, false, Flag::NotZero)]
+    #[case(Flag::Carry, true, Flag::Carry)]
+    #[case(Flag::Carry, false, Flag::NotCarry)]
+    fn test_jr(#[case] flag_to_set: Flag, #[case] flag_value: bool, #[case] jump_flag: Flag) {
+        let mut cpu = Cpu::new();
+
+        let initial = cpu.pc as u8;
+        cpu.write_to_memory(cpu.pc + 1, initial + 100);
+        cpu.registers.set_flag(flag_to_set, flag_value);
+        cpu.jr(jump_flag);
+
+        assert_eq!(cpu.pc as u8, initial + 100);
+    }
+
+    #[rstest]
+    #[case(Target::A)]
+    #[case(Target::B)]
+    #[case(Target::C)]
+    #[case(Target::D)]
+    #[case(Target::E)]
+    #[case(Target::H)]
+    #[case(Target::L)]
+    #[case(Target::BC)]
+    #[case(Target::DE)]
+    #[case(Target::HL)]
+    fn test_load(#[case] dst: Target) {
+        let mut cpu = Cpu::new();
+        cpu.registers.a = 100;
+        cpu.load(dst, Target::A);
+        let result = match dst {
+            Target::A => cpu.registers.a as u16,
+            Target::B => cpu.registers.b as u16,
+            Target::C => cpu.registers.c as u16,
+            Target::D => cpu.registers.d as u16,
+            Target::E => cpu.registers.e as u16,
+            Target::H => cpu.registers.h as u16,
+            Target::L => cpu.registers.l as u16,
+            Target::BC => cpu.registers.combined_register(Target::BC),
+            Target::DE => cpu.registers.combined_register(Target::DE),
+            Target::HL => cpu.registers.combined_register(Target::HL),
+            Target::D8 => {
+                unimplemented!();
+                0
+            }
+            Target::A16 => {
+                unimplemented!();
+                0
+            }
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, 100);
+    }
+
+    #[rstest]
+    #[case(Target::A, 3)]
+    #[case(Target::B, 7)]
+    #[case(Target::C, 7)]
+    #[case(Target::D, 7)]
+    #[case(Target::E, 7)]
+    #[case(Target::H, 7)]
+    #[case(Target::L, 7)]
+    #[case(Target::HL, 7)]
+    fn test_or(#[case] reg: Target, #[case] expected: u8) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = 3;
+        match reg {
+            Target::A => {}
+            Target::B => cpu.registers.b = 5,
+            Target::C => cpu.registers.c = 5,
+            Target::D => cpu.registers.d = 5,
+            Target::E => cpu.registers.e = 5,
+            Target::H => cpu.registers.h = 5,
+            Target::L => cpu.registers.l = 5,
+            Target::HL => cpu.registers.set_combined_register(Target::HL, 5),
+            _ => panic!("Unsupported register"),
+        }
+        cpu.or(reg);
+
+        assert_eq!(cpu.registers.a, expected);
+    }
+
+    #[test]
+    fn test_push_and_pop() {
+        let mut cpu = Cpu::new();
+
+        cpu.registers
+            .set_combined_register(Target::HL, 0b1000100000010001);
+
+        cpu.push(Target::HL);
+
+        assert_eq!(cpu.bus.read(cpu.sp + 1).unwrap(), 0b10001000);
+        assert_eq!(cpu.bus.read(cpu.sp + 2).unwrap(), 0b00010001);
+
+        cpu.pop(Target::BC);
+
+        assert_eq!(
+            cpu.registers.combined_register(Target::BC),
+            0b1000100000010001
+        );
+    }
+
+    #[rstest]
+    #[case(Target::B, 5, 5, false, true, false, false)]
+    #[case(Target::B, 10, 0, true, true, false, false)]
+    #[case(Target::C, 5, 5, false, true, false, false)]
+    #[case(Target::C, 10, 0, true, true, false, false)]
+    #[case(Target::D, 5, 5, false, true, false, false)]
+    #[case(Target::D, 10, 0, true, true, false, false)]
+    #[case(Target::E, 5, 5, false, true, false, false)]
+    #[case(Target::E, 10, 0, true, true, false, false)]
+    #[case(Target::H, 5, 5, false, true, false, false)]
+    #[case(Target::H, 10, 0, true, true, false, false)]
+    #[case(Target::L, 5, 5, false, true, false, false)]
+    #[case(Target::L, 10, 0, true, true, false, false)]
+    #[case(Target::HL, 5, 5, false, true, false, false)]
+    #[case(Target::HL, 10, 0, true, true, false, false)]
+    fn test_sub(
+        #[case] reg: Target,
+        #[case] reg_value: u8,
+        #[case] expected: u8,
+        #[case] expected_zero_flag: bool,
+        #[case] expected_sub_flag: bool,
+        #[case] expected_half_carry_flag: bool,
+        #[case] expected_carry_flag: bool,
+    ) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = 10;
+        match reg {
+            Target::A => {}
+            Target::B => cpu.registers.b = reg_value,
+            Target::C => cpu.registers.c = reg_value,
+            Target::D => cpu.registers.d = reg_value,
+            Target::E => cpu.registers.e = reg_value,
+            Target::H => cpu.registers.h = reg_value,
+            Target::L => cpu.registers.l = reg_value,
+            Target::HL => cpu
+                .registers
+                .set_combined_register(Target::HL, reg_value as u16),
+            _ => panic!("Unsupported register"),
+        }
+        cpu.sub(reg);
+
+        assert_eq!(cpu.registers.a, expected);
+        assert_eq!(cpu.registers.get_flag(Flag::Zero), expected_zero_flag);
+        assert_eq!(cpu.registers.get_flag(Flag::Sub), expected_sub_flag);
+        assert_eq!(
+            cpu.registers.get_flag(Flag::HalfCarry),
+            expected_half_carry_flag
+        );
+        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag);
+    }
+
+    #[rstest]
+    #[case(Flag::Zero)]
+    #[case(Flag::Sub)]
+    #[case(Flag::HalfCarry)]
+    #[case(Flag::Carry)]
+    fn test_flags(#[case] flag: Flag) {
+        let mut cpu = Cpu::new();
+
+        let value = cpu.registers.get_flag(flag);
+        cpu.registers.set_flag(flag, !value);
+        assert!(value != cpu.registers.get_flag(flag));
+
+        cpu.registers.set_flag(flag, false);
+        assert!(!cpu.registers.get_flag(flag));
+
+        cpu.registers.set_flag(flag, true);
+        assert!(cpu.registers.get_flag(flag));
+    }
+
+    #[rstest]
+    #[case(Target::A, 1, 0, 0)]
+    #[case(Target::B, 1, 0, 0)]
+    #[case(Target::C, 1, 0, 0)]
+    #[case(Target::D, 1, 0, 0)]
+    #[case(Target::E, 1, 0, 0)]
+    #[case(Target::H, 1, 0, 0)]
+    #[case(Target::L, 1, 0, 0)]
+    #[case(Target::HL, 1, 0, 0)]
+    fn test_res(
+        #[case] reg: Target,
+        #[case] reg_value: u8,
+        #[case] bit_pos: u8,
+        #[case] expected: u8,
+    ) {
+        let mut cpu = Cpu::new();
+
+        match reg {
+            Target::A => cpu.registers.a = reg_value,
+            Target::B => cpu.registers.b = reg_value,
+            Target::C => cpu.registers.c = reg_value,
+            Target::D => cpu.registers.d = reg_value,
+            Target::E => cpu.registers.e = reg_value,
+            Target::H => cpu.registers.h = reg_value,
+            Target::L => cpu.registers.l = reg_value,
+            Target::HL => cpu
+                .registers
+                .set_combined_register(Target::HL, reg_value as u16),
+            _ => panic!("Unsupported register"),
+        }
+        cpu.res(bit_pos, reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            Target::HL => cpu.registers.combined_register(Target::HL) as u8,
+            _ => panic!("Unsupported register"),
+        };
+
+        assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case(Target::A, 1, 2, 0b10000000, 0)]
+    #[case(Target::B, 1, 2, 0b10000000, 0)]
+    #[case(Target::C, 1, 2, 0b10000000, 0)]
+    #[case(Target::D, 1, 2, 0b10000000, 0)]
+    #[case(Target::E, 1, 2, 0b10000000, 0)]
+    #[case(Target::H, 1, 2, 0b10000000, 0)]
+    #[case(Target::L, 1, 2, 0b10000000, 0)]
+    fn test_rl(
+        #[case] reg: Target,
+        #[case] value1: u8,
+        #[case] expected1: u8,
+        #[case] value2: u8,
+        #[case] expected2: u8,
+    ) {
+        let mut cpu = Cpu::new();
+
+        match reg {
+            Target::A => cpu.registers.a = value1,
+            Target::B => cpu.registers.b = value1,
+            Target::C => cpu.registers.c = value1,
+            Target::D => cpu.registers.d = value1,
+            Target::E => cpu.registers.e = value1,
+            Target::H => cpu.registers.h = value1,
+            Target::L => cpu.registers.l = value1,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.rl(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, expected1);
+
+        match reg {
+            Target::A => cpu.registers.a = value2,
+            Target::B => cpu.registers.b = value2,
+            Target::C => cpu.registers.c = value2,
+            Target::D => cpu.registers.d = value2,
+            Target::E => cpu.registers.e = value2,
+            Target::H => cpu.registers.h = value2,
+            Target::L => cpu.registers.l = value2,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.rl(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(cpu.registers.a, expected2);
+    }
+
+    #[test]
+    fn test_rla() {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = 0b10000000;
+        cpu.rla();
+
+        assert!(cpu.registers.get_flag(Flag::Carry));
+        assert_eq!(cpu.registers.a, 0);
+
+        cpu.rla();
+
+        assert!(!cpu.registers.get_flag(Flag::Carry));
+        assert_eq!(cpu.registers.a, 1);
+    }
+
+    #[test]
+    fn test_rlc() {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.set_flag(Flag::Carry, true);
+        cpu.registers.a = 1;
+        cpu.rlc(Target::A);
+
+        assert_eq!(cpu.registers.a, 2);
+        assert!(!cpu.registers.get_flag(Flag::Carry));
+
+        cpu.registers.a = 0b10000000;
+        cpu.rlc(Target::A);
+
+        assert_eq!(cpu.registers.a, 1);
+        assert!(cpu.registers.get_flag(Flag::Carry));
+    }
+
+    #[rstest]
+    #[case(Target::A, 1, 0, true, 2, 0b10000001, false)]
+    #[case(Target::B, 1, 0, true, 2, 0b10000001, false)]
+    #[case(Target::C, 1, 0, true, 2, 0b10000001, false)]
+    #[case(Target::D, 1, 0, true, 2, 0b10000001, false)]
+    #[case(Target::E, 1, 0, true, 2, 0b10000001, false)]
+    #[case(Target::H, 1, 0, true, 2, 0b10000001, false)]
+    #[case(Target::L, 1, 0, true, 2, 0b10000001, false)]
+    fn test_rr(
+        #[case] reg: Target,
+        #[case] value1: u8,
+        #[case] expected1: u8,
+        #[case] expected_carry_flag1: bool,
+        #[case] value2: u8,
+        #[case] expected2: u8,
+        #[case] expected_carry_flag2: bool,
+    ) {
+        let mut cpu = Cpu::new();
+
+        match reg {
+            Target::A => cpu.registers.a = value1,
+            Target::B => cpu.registers.b = value1,
+            Target::C => cpu.registers.c = value1,
+            Target::D => cpu.registers.d = value1,
+            Target::E => cpu.registers.e = value1,
+            Target::H => cpu.registers.h = value1,
+            Target::L => cpu.registers.l = value1,
+            Target::HL => cpu
+                .registers
+                .set_combined_register(Target::HL, value1 as u16),
+            _ => panic!("Unsupported register"),
+        }
+        cpu.rr(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            Target::HL => cpu.registers.combined_register(Target::HL) as u8,
+            _ => panic!("Unsupported register"),
+        };
+
+        assert_eq!(result, expected1);
+        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag1);
+
+        match reg {
+            Target::A => cpu.registers.a = value2,
+            Target::B => cpu.registers.b = value2,
+            Target::C => cpu.registers.c = value2,
+            Target::D => cpu.registers.d = value2,
+            Target::E => cpu.registers.e = value2,
+            Target::H => cpu.registers.h = value2,
+            Target::L => cpu.registers.l = value2,
+            Target::HL => cpu
+                .registers
+                .set_combined_register(Target::HL, value1 as u16),
+            _ => panic!("Unsupported register"),
+        }
+        cpu.rr(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            Target::HL => cpu.registers.combined_register(Target::HL) as u8,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, expected2);
+        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag2);
+    }
+
+    #[test]
+    fn test_rra() {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = 1;
+        cpu.rra();
+
+        assert!(cpu.registers.get_flag(Flag::Carry));
+        assert_eq!(cpu.registers.a, 0);
+
+        cpu.rra();
+
+        assert!(!cpu.registers.get_flag(Flag::Carry));
+        assert_eq!(cpu.registers.a, 0b10000000);
+    }
+
+    #[rstest]
+    #[case(Target::A, 1, true, 0b10000000, true, 0b11000000, false)]
+    #[case(Target::B, 1, true, 0b10000000, true, 0b11000000, false)]
+    #[case(Target::C, 1, true, 0b10000000, true, 0b11000000, false)]
+    #[case(Target::D, 1, true, 0b10000000, true, 0b11000000, false)]
+    #[case(Target::E, 1, true, 0b10000000, true, 0b11000000, false)]
+    #[case(Target::H, 1, true, 0b10000000, true, 0b11000000, false)]
+    #[case(Target::L, 1, true, 0b10000000, true, 0b11000000, false)]
+    fn test_rrc(
+        #[case] reg: Target,
+        #[case] value1: u8,
+        #[case] flag: bool,
+        #[case] expected1: u8,
+        #[case] expected_flag1: bool,
+        #[case] expected2: u8,
+        #[case] expected_flag2: bool,
+    ) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.set_flag(Flag::Carry, flag);
+        match reg {
+            Target::A => cpu.registers.a = value1,
+            Target::B => cpu.registers.b = value1,
+            Target::C => cpu.registers.c = value1,
+            Target::D => cpu.registers.d = value1,
+            Target::E => cpu.registers.e = value1,
+            Target::H => cpu.registers.h = value1,
+            Target::L => cpu.registers.l = value1,
+            Target::HL => cpu
+                .registers
+                .set_combined_register(Target::HL, value1 as u16),
+            _ => panic!("Unsupported register"),
+        }
+        cpu.rrc(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            Target::HL => cpu.registers.combined_register(Target::HL) as u8,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, expected1);
+        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_flag1);
+
+        cpu.rrc(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            Target::HL => cpu.registers.combined_register(Target::HL) as u8,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, expected2);
+        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_flag2);
+    }
+
+    #[test]
+    fn test_rrca() {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = 1;
+        cpu.rrca();
+
+        assert!(cpu.registers.get_flag(Flag::Carry));
+        assert_eq!(cpu.registers.a, (1 << ZERO_BIT_POS));
+    }
+
+    #[rstest]
+    #[case(Target::B, true, 1, 0xFF)]
+    #[case(Target::B, false, 1, 0)]
+    #[case(Target::C, true, 1, 0xFF)]
+    #[case(Target::C, false, 1, 0)]
+    #[case(Target::D, true, 1, 0xFF)]
+    #[case(Target::D, false, 1, 0)]
+    #[case(Target::E, true, 1, 0xFF)]
+    #[case(Target::E, false, 1, 0)]
+    #[case(Target::H, true, 1, 0xFF)]
+    #[case(Target::H, false, 1, 0)]
+    #[case(Target::L, true, 1, 0xFF)]
+    #[case(Target::L, false, 1, 0)]
+    fn test_sbc(#[case] reg: Target, #[case] flag: bool, #[case] value: u8, #[case] expected: u8) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.set_flag(Flag::Carry, flag);
+        cpu.registers.a = 1;
+        match reg {
+            Target::A => {}
+            Target::B => cpu.registers.b = value,
+            Target::C => cpu.registers.c = value,
+            Target::D => cpu.registers.d = value,
+            Target::E => cpu.registers.e = value,
+            Target::H => cpu.registers.h = value,
+            Target::L => cpu.registers.l = value,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.sbc(reg);
+
+        assert_eq!(cpu.registers.a, expected);
+    }
+
+    #[rstest]
+    #[case(Target::A, 7)]
+    #[case(Target::B, 7)]
+    #[case(Target::C, 7)]
+    #[case(Target::D, 7)]
+    #[case(Target::E, 7)]
+    #[case(Target::H, 7)]
+    #[case(Target::L, 7)]
+    fn test_set(#[case] reg: Target, #[case] bit_pos: u8) {
+        let mut cpu = Cpu::new();
+
+        cpu.set(bit_pos, reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, 128);
+    }
+
+    #[rstest]
+    #[case(Target::A)]
+    #[case(Target::B)]
+    #[case(Target::C)]
+    #[case(Target::D)]
+    #[case(Target::E)]
+    #[case(Target::H)]
+    #[case(Target::L)]
+    fn test_sl(#[case] reg: Target) {
+        let mut cpu = Cpu::new();
+
+        match reg {
+            Target::A => cpu.registers.a = 1,
+            Target::B => cpu.registers.b = 1,
+            Target::C => cpu.registers.c = 1,
+            Target::D => cpu.registers.d = 1,
+            Target::E => cpu.registers.e = 1,
+            Target::H => cpu.registers.h = 1,
+            Target::L => cpu.registers.l = 1,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.sl(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, 2);
+
+        match reg {
+            Target::A => cpu.registers.a = 0b10000000,
+            Target::B => cpu.registers.b = 0b10000000,
+            Target::C => cpu.registers.c = 0b10000000,
+            Target::D => cpu.registers.d = 0b10000000,
+            Target::E => cpu.registers.e = 0b10000000,
+            Target::H => cpu.registers.h = 0b10000000,
+            Target::L => cpu.registers.l = 0b10000000,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.sl(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_sla() {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = 1;
+        cpu.sla(Target::A);
+
+        assert_eq!(cpu.registers.a, 2);
+    }
+
+    #[rstest]
+    #[case(Target::A)]
+    #[case(Target::B)]
+    #[case(Target::C)]
+    #[case(Target::D)]
+    #[case(Target::E)]
+    #[case(Target::H)]
+    #[case(Target::L)]
+    fn test_sr(#[case] reg: Target) {
+        let mut cpu = Cpu::new();
+
+        match reg {
+            Target::A => cpu.registers.a = 2,
+            Target::B => cpu.registers.b = 2,
+            Target::C => cpu.registers.c = 2,
+            Target::D => cpu.registers.d = 2,
+            Target::E => cpu.registers.e = 2,
+            Target::H => cpu.registers.h = 2,
+            Target::L => cpu.registers.l = 2,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.srl(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, 1);
+
+        cpu.srl(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_sra() {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = 0b10000000;
+        cpu.sra(Target::A);
+
+        assert_eq!(cpu.registers.a, 0b11000000);
+    }
+
+    #[rstest]
+    #[case(Target::A)]
+    #[case(Target::B)]
+    #[case(Target::C)]
+    #[case(Target::D)]
+    #[case(Target::E)]
+    #[case(Target::H)]
+    #[case(Target::L)]
+    fn test_swap(#[case] reg: Target) {
+        let mut cpu = Cpu::new();
+
+        match reg {
+            Target::A => cpu.registers.a = 128 + 4,
+            Target::B => cpu.registers.b = 128 + 4,
+            Target::C => cpu.registers.c = 128 + 4,
+            Target::D => cpu.registers.d = 128 + 4,
+            Target::E => cpu.registers.e = 128 + 4,
+            Target::H => cpu.registers.h = 128 + 4,
+            Target::L => cpu.registers.l = 128 + 4,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.swap(reg);
+
+        let result = match reg {
+            Target::A => cpu.registers.a,
+            Target::B => cpu.registers.b,
+            Target::C => cpu.registers.c,
+            Target::D => cpu.registers.d,
+            Target::E => cpu.registers.e,
+            Target::H => cpu.registers.h,
+            Target::L => cpu.registers.l,
+            _ => panic!("Unsupported register"),
+        };
+        assert_eq!(result, 72);
+    }
+
+    #[rstest]
+    #[case(Target::A, 0)]
+    #[case(Target::B, 6)]
+    #[case(Target::C, 6)]
+    #[case(Target::D, 6)]
+    #[case(Target::E, 6)]
+    #[case(Target::H, 6)]
+    #[case(Target::L, 6)]
+    fn test_xor(#[case] reg: Target, #[case] expected: u8) {
+        let mut cpu = Cpu::new();
+
+        cpu.registers.a = 3;
+        match reg {
+            Target::A => {}
+            Target::B => cpu.registers.b = 5,
+            Target::C => cpu.registers.c = 5,
+            Target::D => cpu.registers.d = 5,
+            Target::E => cpu.registers.e = 5,
+            Target::H => cpu.registers.h = 5,
+            Target::L => cpu.registers.l = 5,
+            _ => panic!("Unsupported register"),
+        }
+        cpu.xor(reg);
+
+        assert_eq!(cpu.registers.a, expected);
+    }
 }
