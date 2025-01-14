@@ -46,39 +46,23 @@ impl Registers {
 
     pub fn get_flag(&self, flag: Flag) -> bool {
         match flag {
-            Flag::Zero => {
-                return (self.f >> ZERO_BIT_POS) == 1;
-            }
-            Flag::Carry => {
-                return (self.f & (1 << CARRY_BIT_POS)) >= 1;
-            }
-            Flag::HalfCarry => {
-                return (self.f & (1 << HALF_CARRY_BIT_POS)) >= 1;
-            }
-            Flag::Sub => {
-                return (self.f & (1 << SUB_BIT_POS)) >= 1;
-            }
-            Flag::NotZero => {
-                return (self.f >> ZERO_BIT_POS) == 0;
-            }
-            Flag::NotCarry => {
-                return (self.f & (1 << CARRY_BIT_POS)) == 0;
-            }
-            Flag::NotHalfCarry => {
-                return (self.f & (1 << HALF_CARRY_BIT_POS)) == 0;
-            }
-            Flag::NotSub => {
-                return (self.f & (1 << SUB_BIT_POS)) == 0;
-            }
+            Flag::Zero => (self.f >> ZERO_BIT_POS) == 1,
+            Flag::Carry => (self.f & (1 << CARRY_BIT_POS)) >= 1,
+            Flag::HalfCarry => (self.f & (1 << HALF_CARRY_BIT_POS)) >= 1,
+            Flag::Sub => (self.f & (1 << SUB_BIT_POS)) >= 1,
+            Flag::NotZero => (self.f >> ZERO_BIT_POS) == 0,
+            Flag::NotCarry => (self.f & (1 << CARRY_BIT_POS)) == 0,
+            Flag::NotHalfCarry => (self.f & (1 << HALF_CARRY_BIT_POS)) == 0,
+            Flag::NotSub => (self.f & (1 << SUB_BIT_POS)) == 0,
         }
     }
 
     pub fn filter_flag(&self, flag: Flag) -> u8 {
         match flag {
-            Flag::Zero => return (self.f & (1 << ZERO_BIT_POS)) >> ZERO_BIT_POS,
-            Flag::Carry => return (self.f & (1 << CARRY_BIT_POS)) >> CARRY_BIT_POS,
-            Flag::HalfCarry => return (self.f & (1 << HALF_CARRY_BIT_POS)) >> HALF_CARRY_BIT_POS,
-            Flag::Sub => return (self.f & (1 << SUB_BIT_POS)) >> SUB_BIT_POS,
+            Flag::Zero => (self.f & (1 << ZERO_BIT_POS)) >> ZERO_BIT_POS,
+            Flag::Carry => (self.f & (1 << CARRY_BIT_POS)) >> CARRY_BIT_POS,
+            Flag::HalfCarry => (self.f & (1 << HALF_CARRY_BIT_POS)) >> HALF_CARRY_BIT_POS,
+            Flag::Sub => (self.f & (1 << SUB_BIT_POS)) >> SUB_BIT_POS,
             _ => {
                 panic!("Unimplemented");
             }
@@ -86,25 +70,15 @@ impl Registers {
     }
 
     pub fn set_flag(&mut self, flag: Flag, v: bool) {
-        let mut mask;
-
-        match flag {
-            Flag::Zero => {
-                mask = 1 << ZERO_BIT_POS;
-            }
-            Flag::Carry => {
-                mask = 1 << CARRY_BIT_POS;
-            }
-            Flag::HalfCarry => {
-                mask = 1 << HALF_CARRY_BIT_POS;
-            }
-            Flag::Sub => {
-                mask = 1 << SUB_BIT_POS;
-            }
+        let mut mask = match flag {
+            Flag::Zero => 1 << ZERO_BIT_POS,
+            Flag::Carry => 1 << CARRY_BIT_POS,
+            Flag::HalfCarry => 1 << HALF_CARRY_BIT_POS,
+            Flag::Sub => 1 << SUB_BIT_POS,
             _ => {
                 panic!("Invalid flag as Input!");
             }
-        }
+        };
 
         if !v {
             mask = !mask;
@@ -125,14 +99,14 @@ impl Registers {
     pub fn get_bit(&self, reg: Target, bit: &u32) -> bool {
         let mask = 1 << bit;
         match reg {
-            Target::A => return (self.a & mask) >= 1,
-            Target::B => return (self.b & mask) >= 1,
-            Target::C => return (self.c & mask) >= 1,
-            Target::D => return (self.d & mask) >= 1,
-            Target::E => return (self.e & mask) >= 1,
-            Target::F => return (self.f & mask) >= 1,
-            Target::L => return (self.l & mask) >= 1,
-            Target::H => return (self.h & mask) >= 1,
+            Target::A => (self.a & mask) >= 1,
+            Target::B => (self.b & mask) >= 1,
+            Target::C => (self.c & mask) >= 1,
+            Target::D => (self.d & mask) >= 1,
+            Target::E => (self.e & mask) >= 1,
+            Target::F => (self.f & mask) >= 1,
+            Target::L => (self.l & mask) >= 1,
+            Target::H => (self.h & mask) >= 1,
             _ => {
                 panic!("Unimplemented");
             }
@@ -143,14 +117,14 @@ impl Registers {
         if v == 1 {
             let mask = v << bit;
             match reg {
-                Target::A => self.a = self.a | mask,
-                Target::B => self.b = self.b | mask,
-                Target::C => self.c = self.c | mask,
-                Target::D => self.d = self.d | mask,
-                Target::E => self.e = self.e | mask,
-                Target::F => self.f = self.f | mask,
-                Target::L => self.l = self.l | mask,
-                Target::H => self.h = self.h | mask,
+                Target::A => self.a |= mask,
+                Target::B => self.b |= mask,
+                Target::C => self.c |= mask,
+                Target::D => self.d |= mask,
+                Target::E => self.e |= mask,
+                Target::F => self.f |= mask,
+                Target::L => self.l |= mask,
+                Target::H => self.h |= mask,
                 _ => {
                     panic!("Unimplemented");
                 }
@@ -159,14 +133,14 @@ impl Registers {
             let mut mask = 0b1111111;
             mask = mask ^ (1 << bit);
             match reg {
-                Target::A => self.a = self.a & mask,
-                Target::B => self.b = self.b & mask,
-                Target::C => self.c = self.c & mask,
-                Target::D => self.d = self.d & mask,
-                Target::E => self.e = self.e & mask,
-                Target::F => self.f = self.f & mask,
-                Target::L => self.l = self.l & mask,
-                Target::H => self.h = self.h & mask,
+                Target::A => self.a &= mask,
+                Target::B => self.b &= mask,
+                Target::C => self.c &= mask,
+                Target::D => self.d &= mask,
+                Target::E => self.e &= mask,
+                Target::F => self.f &= mask,
+                Target::L => self.l &= mask,
+                Target::H => self.h &= mask,
                 _ => {
                     panic!("Unimplemented");
                 }
@@ -212,14 +186,14 @@ impl Registers {
 
     pub fn register_as_bit_string(&self, reg: Target) -> String {
         match reg {
-            Target::A => return conversion::u8_as_bit_string(self.a),
-            Target::B => return conversion::u8_as_bit_string(self.b),
-            Target::C => return conversion::u8_as_bit_string(self.c),
-            Target::D => return conversion::u8_as_bit_string(self.d),
-            Target::E => return conversion::u8_as_bit_string(self.e),
-            Target::F => return conversion::u8_as_bit_string(self.f),
-            Target::L => return conversion::u8_as_bit_string(self.l),
-            Target::H => return conversion::u8_as_bit_string(self.h),
+            Target::A => conversion::u8_as_bit_string(self.a),
+            Target::B => conversion::u8_as_bit_string(self.b),
+            Target::C => conversion::u8_as_bit_string(self.c),
+            Target::D => conversion::u8_as_bit_string(self.d),
+            Target::E => conversion::u8_as_bit_string(self.e),
+            Target::F => conversion::u8_as_bit_string(self.f),
+            Target::L => conversion::u8_as_bit_string(self.l),
+            Target::H => conversion::u8_as_bit_string(self.h),
             _ => {
                 panic!("Unimplemented");
             }
@@ -228,14 +202,14 @@ impl Registers {
 
     pub fn register_as_hex_string(&self, reg: Target) -> String {
         match reg {
-            Target::A => return conversion::u8_as_hex_string(self.a),
-            Target::B => return conversion::u8_as_hex_string(self.b),
-            Target::C => return conversion::u8_as_hex_string(self.c),
-            Target::D => return conversion::u8_as_hex_string(self.d),
-            Target::E => return conversion::u8_as_hex_string(self.e),
-            Target::F => return conversion::u8_as_hex_string(self.f),
-            Target::L => return conversion::u8_as_hex_string(self.l),
-            Target::H => return conversion::u8_as_hex_string(self.h),
+            Target::A => conversion::u8_as_hex_string(self.a),
+            Target::B => conversion::u8_as_hex_string(self.b),
+            Target::C => conversion::u8_as_hex_string(self.c),
+            Target::D => conversion::u8_as_hex_string(self.d),
+            Target::E => conversion::u8_as_hex_string(self.e),
+            Target::F => conversion::u8_as_hex_string(self.f),
+            Target::L => conversion::u8_as_hex_string(self.l),
+            Target::H => conversion::u8_as_hex_string(self.h),
             _ => {
                 panic!("Unimplemented");
             }
