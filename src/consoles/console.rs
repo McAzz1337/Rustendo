@@ -1,39 +1,36 @@
-use std::ops::Deref;
+use std::fmt::Display;
 
-use super::{gameboy::{game_boy::GameBoy, gbcartridge::GbCartridge}, cartridge::Cartridge};
-
+use super::{
+    cartridge::Cartridge,
+    gameboy::{game_boy::GameBoy, gbcartridge::GbCartridge},
+};
+use std::error::Error;
 
 pub trait Console {
-    
     fn save_game(&self, path: String);
     fn load_save(&self, path: String);
     fn run(&mut self);
-
 }
 
-
+#[derive(Debug)]
 pub struct NoConsolePresentError {
-    
     pub what: String,
 }
 
-
-pub fn create_for(cart: impl Cartridge) -> Result<impl Console, NoConsolePresentError> {
-
-    match cart.as_any().downcast_ref::<GbCartridge>() {
-        Some(c) => {
-            return Ok(
-                    GameBoy::new(c)
-            );
-        },
-        _ => {}
+impl Display for NoConsolePresentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.what)
     }
+}
 
+impl Error for NoConsolePresentError {}
 
-
-    Err(
-        NoConsolePresentError {
-            what: "No Console present for the rom provided".to_string()
-        }
-    )
+pub fn create_for(cart: impl Cartridge) -> Result<impl Console, Error> {
+    if let Some(cartridge) = cart.as_any().downcast_ref::<GbCartridge>() {
+        Ok(GameBoy::new(cartridge))
+    } else {
+        Err(NoConsolePresentError {
+            what: String::from("No Console present for the rom provided"),
+        })
+    }
 }
