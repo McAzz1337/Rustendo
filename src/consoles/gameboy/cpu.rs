@@ -6,16 +6,11 @@ use super::target::Target;
 extern crate libc;
 
 #[allow(unused_imports)]
-use super::instruction::{
-    AFFECTED, CARRY_FLAG, HALF_CARRY_FLAG, NOT_AFFECTED, RESET, SET, SUB_FLAG, ZERO_FLAG,
-};
-
-#[allow(unused_imports)]
 use super::registers::{CARRY_BIT_POS, HALF_CARRY_BIT_POS, SUB_BIT_POS, ZERO_BIT_POS};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use super::instruction::Instruction;
+use super::instruction::{FlagAction, Instruction};
 use super::memory::Memory;
 use super::opcode::OpCode;
 use super::registers::Flag;
@@ -114,146 +109,154 @@ impl Cpu {
 
     pub fn load_program(&mut self, program: Vec<u8>) {
         for i in 0..program.len() {
-            self.bus.write(i as u16, program[i]);
+            let _ = self.bus.write(i as u16, program[i]);
         }
     }
 
     fn set_flags(&mut self, instruction: &Instruction, old_value: u8, new_value: u8) {
-        match instruction.flags[ZERO_FLAG] {
-            RESET => {
-                self.registers.set_flag(Flag::Zero, false);
-            }
-            SET => {
-                self.registers.set_flag(Flag::Zero, true);
-            }
-            AFFECTED => {
-                self.registers.set_flag(Flag::Zero, new_value == 0);
-            }
+        match instruction.flag_affection.zero_flag {
+            FlagAction::Reset => self.registers.set_flag(Flag::Zero, false),
+            FlagAction::Set => self.registers.set_flag(Flag::Zero, true),
+            FlagAction::Affected => self.registers.set_flag(Flag::Zero, new_value == 0),
             _ => {}
         }
 
-        match instruction.flags[SUB_FLAG] {
-            RESET => {
-                self.registers.set_flag(Flag::Sub, false);
-            }
-            SET => {
-                self.registers.set_flag(Flag::Sub, true);
-            }
-            AFFECTED => {
+        match instruction.flag_affection.sub_flag {
+            FlagAction::Reset => self.registers.set_flag(Flag::Sub, false),
+            FlagAction::Set => self.registers.set_flag(Flag::Sub, true),
+            FlagAction::Affected => {
                 // Check if this arm ever gets executed
                 unimplemented!()
             }
             _ => {}
         }
 
-        match instruction.flags[HALF_CARRY_FLAG] {
-            RESET => {
-                self.registers.set_flag(Flag::HalfCarry, false);
-            }
-            SET => {
-                self.registers.set_flag(Flag::HalfCarry, true);
-            }
-            AFFECTED => {
-                if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
-                    self.registers
-                        .set_flag(Flag::HalfCarry, old_value > 0b1111 && new_value < 0b10000);
-                } else if instruction.flags[SUB_FLAG] == RESET {
-                    self.registers
-                        .set_flag(Flag::HalfCarry, old_value < 0b10000 && new_value > 0b1111);
+        match instruction.flag_affection.half_carry_flag {
+            FlagAction::Reset => self.registers.set_flag(Flag::HalfCarry, false),
+            FlagAction::Set => self.registers.set_flag(Flag::HalfCarry, true),
+            FlagAction::Affected => {
+                match instruction.flag_affection.sub_flag {
+                    FlagAction::Affected => self
+                        .registers
+                        .set_flag(Flag::HalfCarry, old_value > 0b1111 && new_value < 0b10000),
+                    FlagAction::Set => self
+                        .registers
+                        .set_flag(Flag::HalfCarry, old_value > 0b1111 && new_value < 0b10000),
+                    FlagAction::Reset => self
+                        .registers
+                        .set_flag(Flag::HalfCarry, old_value <= 0b1111 && new_value > 0b1111),
+                    _ => {}
                 }
+                // if instruction.[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
+                //     self.registers
+                //         .set_flag(Flag::HalfCarry, old_value > 0b1111 && new_value < 0b10000);
+                // } else if instruction.flags[SUB_FLAG] == RESET {
+                //     self.registers
+                //         .set_flag(Flag::HalfCarry, old_value < 0b10000 && new_value > 0b1111);
+                // }
             }
             _ => {}
         }
 
-        match instruction.flags[CARRY_FLAG] {
-            RESET => {
-                self.registers.set_flag(Flag::Carry, false);
-            }
-            SET => {
-                self.registers.set_flag(Flag::Carry, true);
-            }
-            AFFECTED => {
-                if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
-                    self.registers
-                        .set_flag(Flag::Carry, old_value > 0b0 && old_value < new_value);
-                } else if instruction.flags[SUB_FLAG] == RESET {
-                    self.registers
-                        .set_flag(Flag::Carry, old_value < 0b11111111 && old_value > new_value);
+        match instruction.flag_affection.carry_flag {
+            FlagAction::Reset => self.registers.set_flag(Flag::Carry, false),
+            FlagAction::Set => self.registers.set_flag(Flag::Carry, true),
+            FlagAction::Affected => {
+                match instruction.flag_affection.sub_flag {
+                    FlagAction::Affected => {
+                        self.registers.set_flag(Flag::Carry, old_value < new_value)
+                    }
+                    FlagAction::Set => self.registers.set_flag(Flag::Carry, old_value < new_value),
+                    FlagAction::Reset => {
+                        self.registers.set_flag(Flag::Carry, old_value > new_value);
+                        println!("old = {old_value} new = {new_value}");
+                    }
+                    _ => {}
                 }
+                // if let FlagAction::Affected = instruction.flag_affection.sub_flag {
+                //     self.registers .set_flag(Flag::Carry, old_value > 0b0 && old_value < new_value);
+
+                // } else if let FlagAction::Set = instruction.flag_affection.sub_flag {
+                //     self.registers
+                //         .set_flag(Flag::Carry, old_value > 0b0 && old_value < new_value);
+                // } else if let FlagAction::Reset =  instruction.flag_affection.sub_flag {
+                //     self.registers
+                //         .set_flag(Flag::Carry, old_value < 0b11111111 && old_value > new_value);
+                // }
             }
             _ => {}
         }
     }
 
     fn set_flags_16(&mut self, instruction: &Instruction, old_value: u16, new_value: u16) {
-        match instruction.flags[ZERO_FLAG] {
-            RESET => {
-                self.registers.set_flag(Flag::Zero, false);
-            }
-            SET => {
-                self.registers.set_flag(Flag::Zero, true);
-            }
-            AFFECTED => {
-                if new_value == 0 {
-                    self.registers.set_flag(Flag::Zero, true);
-                }
-            }
+        match instruction.flag_affection.zero_flag {
+            FlagAction::Reset => self.registers.set_flag(Flag::Zero, false),
+            FlagAction::Set => self.registers.set_flag(Flag::Zero, true),
+            FlagAction::Affected => self.registers.set_flag(Flag::Zero, new_value == 0),
             _ => {}
         }
 
-        match instruction.flags[SUB_FLAG] {
-            RESET => {
-                self.registers.set_flag(Flag::Sub, false);
-            }
-            SET => {
-                self.registers.set_flag(Flag::Sub, true);
-            }
-            AFFECTED => {
+        match instruction.flag_affection.sub_flag {
+            FlagAction::Reset => self.registers.set_flag(Flag::Sub, false),
+            FlagAction::Set => self.registers.set_flag(Flag::Sub, true),
+            FlagAction::Affected => {
                 // Check if this arm ever gets executed
             }
             _ => {}
         }
 
-        match instruction.flags[HALF_CARRY_FLAG] {
-            RESET => {
-                self.registers.set_flag(Flag::HalfCarry, false);
-            }
-            SET => {
-                self.registers.set_flag(Flag::HalfCarry, true);
-            }
-            AFFECTED => {
-                if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
-                    self.registers.set_flag(
-                        Flag::HalfCarry,
-                        old_value > 0b11111111 && new_value < 0b100000000,
-                    );
-                } else if instruction.flags[SUB_FLAG] == RESET {
-                    self.registers.set_flag(
-                        Flag::HalfCarry,
-                        old_value < 0b100000000 && new_value > 0b11111111,
-                    );
+        match instruction.flag_affection.half_carry_flag {
+            FlagAction::Reset => self.registers.set_flag(Flag::HalfCarry, false),
+            FlagAction::Set => self.registers.set_flag(Flag::HalfCarry, true),
+            FlagAction::Affected => {
+                match instruction.flag_affection.sub_flag {
+                    FlagAction::Affected => self
+                        .registers
+                        .set_flag(Flag::HalfCarry, old_value > 0b1111 && new_value <= 0b1111),
+                    FlagAction::Set => self
+                        .registers
+                        .set_flag(Flag::HalfCarry, old_value > 0b1111 && new_value <= 0b1111),
+                    FlagAction::Reset => self.registers.set_flag(Flag::HalfCarry, false),
+                    FlagAction::NotAffected => self
+                        .registers
+                        .set_flag(Flag::HalfCarry, old_value > 0b1111 && new_value <= 0b1111),
                 }
+                // if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
+                //     self.registers.set_flag(
+                //         Flag::HalfCarry,
+                //         old_value > 0b11111111 && new_value < 0b100000000,
+                //     );
+                // } else if instruction.flags[SUB_FLAG] == RESET {
+                //     self.registers.set_flag(
+                //         Flag::HalfCarry,
+                //         old_value < 0b100000000 && new_value > 0b11111111,
+                //     );
+                // }
             }
             _ => {}
         }
 
-        match instruction.flags[CARRY_FLAG] {
-            RESET => {
-                self.registers.set_flag(Flag::Carry, false);
-            }
-            SET => {
-                self.registers.set_flag(Flag::Carry, true);
-            }
-            AFFECTED => {
-                if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
-                    self.registers
-                        .set_flag(Flag::Carry, old_value > 0b0 && old_value < new_value);
-                } else if instruction.flags[SUB_FLAG] == RESET {
-                    self.registers.set_flag(
-                        Flag::Carry,
-                        old_value < 0b1111111111111111 && old_value > new_value,
-                    );
+        match instruction.flag_affection.carry_flag {
+            FlagAction::Reset => self.registers.set_flag(Flag::Carry, false),
+            FlagAction::Set => self.registers.set_flag(Flag::Carry, true),
+            FlagAction::Affected => {
+                match instruction.flag_affection.sub_flag {
+                    FlagAction::Affected => self
+                        .registers
+                        .set_flag(Flag::Carry, old_value > 0b0 && old_value < new_value),
+                    FlagAction::Set => self.registers.set_flag(Flag::Carry, true),
+                    FlagAction::Reset => self.registers.set_flag(Flag::Carry, false),
+                    _ => {}
                 }
+                // if instruction.flags[SUB_FLAG] == AFFECTED || instruction.flags[SUB_FLAG] == SET {
+                //     self.registers
+                //         .set_flag(Flag::Carry, old_value > 0b0 && old_value < new_value);
+                // } else if instruction.flags[SUB_FLAG] == RESET {
+                //     self.registers.set_flag(
+                //         Flag::Carry,
+                //         old_value < 0b1111111111111111 && old_value > new_value,
+                //     );
+                // }
             }
             _ => {}
         }
@@ -268,7 +271,7 @@ impl Cpu {
     }
 
     pub fn write_to_memory(&mut self, address: u16, byte: u8) {
-        self.bus.write(address, byte);
+        let _ = self.bus.write(address, byte);
     }
 
     pub fn read_memory(&self, address: u16) -> u8 {
@@ -277,13 +280,13 @@ impl Cpu {
 
     pub fn zero_memory(&mut self) {
         for i in 0..0xFFFF {
-            self.bus.write(i, 0);
+            let _ = self.bus.write(i, 0);
         }
     }
 
     pub fn set_memory_to_end_of_program(&mut self) {
         for i in 0..0xFFFF {
-            self.bus.write(
+            let _ = self.bus.write(
                 i,
                 Instruction::byte_from_opcode(OpCode::EndOfProgram).unwrap(),
             );
@@ -536,7 +539,7 @@ impl Cpu {
         //     self.registers.a < 0b10000 && self.registers.a as u16 + v + carry > 0b1111,
         // );
         // self.registers.set_flag(Flag::Sub, false);
-        self.registers.a = self.registers.a.wrapping_add(v).wrapping_add(carry);
+        self.registers.a = self.registers.a.wrapping_add(v + carry);
 
         self.set_flags(
             Instruction::from_opcode(OpCode::ADC(reg)).unwrap(),
@@ -584,7 +587,6 @@ impl Cpu {
         );
     }
 
-    #[allow(unused_assignments)]
     fn add_16(&mut self, dst: Target, src: Target) {
         let v: u16 = match src {
             Target::HL => self.registers.combined_register(src),
@@ -671,7 +673,10 @@ impl Cpu {
             Target::E => self.registers.e,
             Target::H => self.registers.h,
             Target::L => self.registers.l,
-            // Target::HL => v = ((self.registers.h as u16) << 8) | self.registers.l as u16,
+            Target::HL => self
+                .bus
+                .read(self.registers.combined_register(Target::HL))
+                .unwrap(),
             _ => {
                 panic_or_print!(
                     "Unimplemented {}",
@@ -791,19 +796,14 @@ impl Cpu {
             Target::L => self.registers.l = f(self.registers.l, self),
             Target::H => self.registers.h = f(self.registers.h, self),
             Target::HL => {
-                let mut v = self
-                    .bus
-                    .read(self.registers.combined_register(target))
-                    .unwrap();
+                let mut v = self.registers.combined_register(target);
                 // self.registers.set_flag(Flag::HalfCarry, v == 0b10000);
                 let old = v;
                 v = v.wrapping_sub(1);
+                self.registers.set_combined_register(Target::HL, v);
                 // self.registers.set_flag(Flag::Zero, v == 0);
                 // self.registers.set_flag(Flag::Sub, true);
-                self.bus
-                    .write(self.registers.combined_register(target), v)
-                    .unwrap();
-                self.set_flags(
+                self.set_flags_16(
                     Instruction::from_opcode(OpCode::DEC(target)).unwrap(),
                     old,
                     v,
@@ -861,19 +861,14 @@ impl Cpu {
             Target::L => self.registers.l = f(self.registers.l, self),
             Target::H => self.registers.h = f(self.registers.h, self),
             Target::HL => {
-                let mut v = self
-                    .bus
-                    .read(self.registers.combined_register(target))
-                    .unwrap();
+                let mut v = self.registers.combined_register(target);
                 let old = v;
                 // self.registers.set_flag(Flag::HalfCarry, v == 0b1111);
                 v = v.wrapping_add(1);
+                self.registers.set_combined_register(Target::HL, v);
                 // self.registers.set_flag(Flag::Zero, v == 0);
                 // self.registers.set_flag(Flag::Sub, false);
-                self.bus
-                    .write(self.registers.combined_register(target), v)
-                    .unwrap();
-                self.set_flags(
+                self.set_flags_16(
                     Instruction::from_opcode(OpCode::INC(target)).unwrap(),
                     old,
                     v,
@@ -1260,6 +1255,28 @@ impl Cpu {
                 let old = self.registers.l;
                 self.registers.l = f(self.registers.l, self);
                 (old, self.registers.l)
+            }
+            Target::HL => {
+                let old = self.registers.combined_register(Target::HL);
+                let lower = old & 0b11111111;
+                let upper = (old & 0b1111111100000000) >> 7;
+                let old_carry = if self.registers.get_flag(Flag::Carry) {
+                    1
+                } else {
+                    0
+                };
+                let msb_upper = (upper >> 7) as u8;
+                let msb_lower = (lower >> 7) as u8;
+                let new_upper = (upper << 1) as u8 | old_carry;
+                let new_carry = msb_lower as u8;
+                let new_lower = (lower << 1) as u8 | msb_upper;
+                let new_value = ((new_upper as u16) << 7) + new_lower as u16;
+                self.registers.set_combined_register(Target::HL, new_value);
+                self.registers.set_flag(Flag::Zero, new_value == 0);
+                self.registers.set_flag(Flag::Sub, false);
+                self.registers.set_flag(Flag::HalfCarry, false);
+                self.registers.set_flag(Flag::Carry, new_carry > 0);
+                return;
             }
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RL(reg)));
@@ -1690,12 +1707,9 @@ mod tests {
     use rstest::rstest;
 
     use crate::consoles::{
-        addressable,
         gameboy::{
             cpu::Cpu,
-            instruction::Instruction,
-            opcode::OpCode,
-            registers::{self, Flag, ZERO_BIT_POS},
+            registers::{Flag, ZERO_BIT_POS},
             target::Target,
         },
         readable::Readable,
@@ -1703,7 +1717,8 @@ mod tests {
     };
 
     #[rstest]
-    #[case(Target::B, true, 0)]
+    #[case(Target::A, true, 3)]
+    #[case(Target::A, false, 2)]
     #[case(Target::B, false, 255)]
     #[case(Target::C, true, 0)]
     #[case(Target::C, false, 255)]
@@ -1715,70 +1730,96 @@ mod tests {
     #[case(Target::H, false, 255)]
     #[case(Target::L, true, 0)]
     #[case(Target::L, false, 255)]
-    fn test_adc(#[case] dst: Target, #[case] carry: bool, #[case] ecxpected: u8) {
+    #[case(Target::HL, true, 0)]
+    #[case(Target::HL, false, 255)]
+    fn test_adc(#[case] src: Target, #[case] carry: bool, #[case] expected: u8) {
         let mut cpu = Cpu::new();
 
         cpu.registers.set_flag(Flag::Carry, carry);
         cpu.registers.a = 254;
-        match dst {
+        match src {
+            Target::A => cpu.registers.a = 1,
             Target::B => cpu.registers.b = 1,
             Target::C => cpu.registers.c = 1,
             Target::D => cpu.registers.d = 1,
             Target::E => cpu.registers.e = 1,
             Target::H => cpu.registers.h = 1,
             Target::L => cpu.registers.l = 1,
+            Target::HL => {
+                let _ = cpu.bus.write(100, 1);
+                cpu.registers.set_combined_register(Target::HL, 100);
+            }
             _ => panic!("Unsupported register"),
         }
-        cpu.adc(dst);
+        cpu.adc(src);
 
-        assert_eq!(cpu.registers.a, ecxpected);
+        assert_eq!(cpu.registers.a, expected);
     }
 
     #[rstest]
-    #[case(Target::B, 5)]
-    #[case(Target::C, 5)]
-    #[case(Target::D, 5)]
-    #[case(Target::E, 5)]
-    #[case(Target::H, 5)]
-    #[case(Target::L, 5)]
-    fn test_add(#[case] src: Target, #[case] expected: u8) {
+    #[case(0, Target::B, 5, 5, false, false)]
+    #[case(0, Target::C, 5, 5, false, false)]
+    #[case(0, Target::D, 5, 5, false, false)]
+    #[case(0, Target::E, 5, 5, false, false)]
+    #[case(0, Target::H, 5, 5, false, false)]
+    #[case(0, Target::L, 5, 5, false, false)]
+    #[case(0, Target::HL, 5, 5, false, false)]
+    #[case(255, Target::B, 1, 0, true, false)]
+    #[case(255, Target::C, 1, 0, true, false)]
+    #[case(255, Target::D, 1, 0, true, false)]
+    #[case(255, Target::E, 1, 0, true, false)]
+    #[case(255, Target::H, 1, 0, true, false)]
+    #[case(255, Target::L, 1, 0, true, false)]
+    #[case(255, Target::HL, 1, 0, true, false)]
+    #[case(0b1111, Target::B, 1, 0b10000, false, true)]
+    #[case(0b1111, Target::C, 1, 0b10000, false, true)]
+    #[case(0b1111, Target::D, 1, 0b10000, false, true)]
+    #[case(0b1111, Target::E, 1, 0b10000, false, true)]
+    #[case(0b1111, Target::H, 1, 0b10000, false, true)]
+    #[case(0b1111, Target::L, 1, 0b10000, false, true)]
+    #[case(0b1111, Target::HL, 1, 0b10000, false, true)]
+    fn test_add(
+        #[case] val_a: u8,
+        #[case] src: Target,
+        #[case] val_b: u8,
+        #[case] expected: u8,
+        #[case] expected_carry_flag: bool,
+        #[case] expected_half_carry_flag: bool,
+    ) {
         let mut cpu = Cpu::new();
 
-        cpu.registers.a = 0;
+        cpu.registers.a = val_a;
         match src {
-            Target::B => cpu.registers.b = expected,
-            Target::C => cpu.registers.c = expected,
-            Target::D => cpu.registers.d = expected,
-            Target::E => cpu.registers.e = expected,
-            Target::H => cpu.registers.h = expected,
-            Target::L => cpu.registers.l = expected,
+            Target::B => cpu.registers.b = val_b,
+            Target::C => cpu.registers.c = val_b,
+            Target::D => cpu.registers.d = val_b,
+            Target::E => cpu.registers.e = val_b,
+            Target::H => cpu.registers.h = val_b,
+            Target::L => cpu.registers.l = val_b,
+            Target::HL => {
+                let _ = cpu.bus.write(100, val_b);
+                cpu.registers.set_combined_register(Target::HL, 100);
+            }
             _ => panic!("Unsupported register"),
         }
         cpu.add(src);
-        assert_eq!(cpu.registers.a, expected);
-        assert!(!cpu.registers.get_flag(Flag::Zero));
-        assert!(!cpu.registers.get_flag(Flag::Carry));
-        assert!(!cpu.registers.get_flag(Flag::HalfCarry));
-        assert!(!cpu.registers.get_flag(Flag::Sub));
-
-        cpu.registers.a = 255;
-        match src {
-            Target::B => cpu.registers.b = 1,
-            Target::C => cpu.registers.c = 1,
-            Target::D => cpu.registers.d = 1,
-            Target::E => cpu.registers.e = 1,
-            Target::F => cpu.registers.f = 1,
-            Target::H => cpu.registers.h = 1,
-            Target::L => cpu.registers.l = 1,
-            _ => panic!("Unsupported register"),
-        }
-        cpu.add(src);
-
-        assert_eq!(cpu.registers.a, 0);
-        assert!(cpu.registers.get_flag(Flag::Zero));
-        assert!(cpu.registers.get_flag(Flag::Carry));
-        assert!(!cpu.registers.get_flag(Flag::HalfCarry));
-        assert!(!cpu.registers.get_flag(Flag::Sub));
+        assert_eq!(cpu.registers.a, expected, "False expected value");
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Zero),
+            expected == 0,
+            "False zero flag"
+        );
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Carry),
+            expected_carry_flag,
+            "False carry flag"
+        );
+        assert_eq!(
+            cpu.registers.get_flag(Flag::HalfCarry),
+            expected_half_carry_flag,
+            "False half carry flag"
+        );
+        assert!(!cpu.registers.get_flag(Flag::Sub), "False sub flag");
     }
 
     #[rstest]
@@ -1847,6 +1888,9 @@ mod tests {
     #[case(3, Target::L, 5, 1, false)]
     #[case(2, Target::L, 5, 0, true)]
     #[case(2, Target::L, 6, 2, false)]
+    #[case(3, Target::HL, 5, 1, false)]
+    #[case(2, Target::HL, 5, 0, true)]
+    #[case(2, Target::HL, 6, 2, false)]
     fn test_and(
         #[case] a_value: u8,
         #[case] src: Target,
@@ -1864,6 +1908,10 @@ mod tests {
             Target::E => cpu.registers.e = src_value,
             Target::H => cpu.registers.h = src_value,
             Target::L => cpu.registers.l = src_value,
+            Target::HL => {
+                let _ = cpu.bus.write(100, src_value);
+                cpu.registers.set_combined_register(Target::HL, 100);
+            }
             _ => panic!("Unsupported register"),
         }
         cpu.and(src);
@@ -1890,8 +1938,10 @@ mod tests {
     #[case(0b00000000, 7, Target::H, true, false, false, true)]
     #[case(0b10000000, 7, Target::L, false, false, false, true)]
     #[case(0b00000000, 7, Target::L, true, false, false, true)]
+    #[case(0b10000000, 7, Target::HL, false, false, false, true)]
+    #[case(0b00000000, 7, Target::HL, true, false, false, true)]
     fn test_bit(
-        #[case] reg_value1: u8,
+        #[case] value: u8,
         #[case] bit_pos: u8,
         #[case] src: Target,
         #[case] expected_zero_flag: bool,
@@ -1902,13 +1952,17 @@ mod tests {
         let mut cpu = Cpu::new();
 
         match src {
-            Target::A => cpu.registers.a = reg_value1,
-            Target::B => cpu.registers.b = reg_value1,
-            Target::C => cpu.registers.c = reg_value1,
-            Target::D => cpu.registers.d = reg_value1,
-            Target::E => cpu.registers.e = reg_value1,
-            Target::H => cpu.registers.h = reg_value1,
-            Target::L => cpu.registers.l = reg_value1,
+            Target::A => cpu.registers.a = value,
+            Target::B => cpu.registers.b = value,
+            Target::C => cpu.registers.c = value,
+            Target::D => cpu.registers.d = value,
+            Target::E => cpu.registers.e = value,
+            Target::H => cpu.registers.h = value,
+            Target::L => cpu.registers.l = value,
+            Target::HL => {
+                let _ = cpu.bus.write(100, value);
+                cpu.registers.set_combined_register(Target::HL, 100);
+            }
             _ => panic!("Unsupported register"),
         }
         cpu.bit(bit_pos, src);
@@ -1965,15 +2019,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case(1, Target::A, 1, 0, true, true, false, false)]
-    #[case(1, Target::B, 1, 0, true, true, false, false)]
-    #[case(1, Target::C, 1, 0, true, true, false, false)]
-    #[case(1, Target::D, 1, 0, true, true, false, false)]
-    #[case(1, Target::E, 1, 0, true, true, false, false)]
-    #[case(1, Target::H, 1, 0, true, true, false, false)]
-    #[case(1, Target::L, 1, 0, true, true, false, false)]
+    #[case(Target::A, 1, 0, true, true, false, false)]
+    #[case(Target::B, 1, 0, true, true, false, false)]
+    #[case(Target::C, 1, 0, true, true, false, false)]
+    #[case(Target::D, 1, 0, true, true, false, false)]
+    #[case(Target::E, 1, 0, true, true, false, false)]
+    #[case(Target::H, 1, 0, true, true, false, false)]
+    #[case(Target::L, 1, 0, true, true, false, false)]
+    #[case(Target::HL, 1, 0, true, true, false, false)]
+    #[case(Target::A, 0b10000, 0b1111, false, true, true, false)]
+    #[case(Target::B, 0b10000, 0b1111, false, true, true, false)]
+    #[case(Target::C, 0b10000, 0b1111, false, true, true, false)]
+    #[case(Target::D, 0b10000, 0b1111, false, true, true, false)]
+    #[case(Target::E, 0b10000, 0b1111, false, true, true, false)]
+    #[case(Target::H, 0b10000, 0b1111, false, true, true, false)]
+    #[case(Target::L, 0b10000, 0b1111, false, true, true, false)]
+    #[case(Target::HL, 0b10000, 0b1111, false, true, true, false)]
     fn test_dec(
-        #[case] a_value: u8,
         #[case] reg: Target,
         #[case] reg_value: u8,
         #[case] expected: u8,
@@ -1983,16 +2045,17 @@ mod tests {
         #[case] expected_carry_flag: bool,
     ) {
         let mut cpu = Cpu::new();
-
-        cpu.registers.a = a_value;
         match reg {
-            Target::A => {}
+            Target::A => cpu.registers.a = reg_value,
             Target::B => cpu.registers.b = reg_value,
             Target::C => cpu.registers.c = reg_value,
             Target::D => cpu.registers.d = reg_value,
             Target::E => cpu.registers.e = reg_value,
             Target::H => cpu.registers.h = reg_value,
             Target::L => cpu.registers.l = reg_value,
+            Target::HL => cpu
+                .registers
+                .set_combined_register(Target::HL, reg_value as u16),
             _ => panic!("Unsupported register"),
         }
         cpu.dec(reg);
@@ -2005,17 +2068,31 @@ mod tests {
             Target::E => cpu.registers.e,
             Target::H => cpu.registers.h,
             Target::L => cpu.registers.l,
+            Target::HL => cpu.registers.combined_register(Target::HL) as u8,
             _ => panic!("Unsupported register"),
         };
 
-        assert_eq!(result, expected);
-        assert_eq!(cpu.registers.get_flag(Flag::Zero), expected_zero_flag);
-        assert_eq!(cpu.registers.get_flag(Flag::Sub), expected_sub_flag);
+        assert_eq!(result, expected, "False result");
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Zero),
+            expected_zero_flag,
+            "False zero flag"
+        );
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Sub),
+            expected_sub_flag,
+            "False sub flag"
+        );
         assert_eq!(
             cpu.registers.get_flag(Flag::HalfCarry),
-            expected_half_carry_flag
+            expected_half_carry_flag,
+            "False half carry flag"
         );
-        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag);
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Carry),
+            expected_carry_flag,
+            "False carry flag"
+        );
     }
 
     #[rstest]
@@ -2042,19 +2119,26 @@ mod tests {
 
     #[rstest]
     #[case(0, Target::A, 1, false, false, false, false)]
-    #[case(255, Target::A, 0, true, false, false, false)]
     #[case(0, Target::B, 1, false, false, false, false)]
-    #[case(255, Target::B, 0, true, false, false, false)]
     #[case(0, Target::C, 1, false, false, false, false)]
-    #[case(255, Target::C, 0, true, false, false, false)]
     #[case(0, Target::D, 1, false, false, false, false)]
-    #[case(255, Target::D, 0, true, false, false, false)]
     #[case(0, Target::E, 1, false, false, false, false)]
-    #[case(255, Target::E, 0, true, false, false, false)]
     #[case(0, Target::H, 1, false, false, false, false)]
-    #[case(255, Target::H, 0, true, false, false, false)]
     #[case(0, Target::L, 1, false, false, false, false)]
     #[case(255, Target::L, 0, true, false, false, false)]
+    #[case(255, Target::A, 0, true, false, false, false)]
+    #[case(255, Target::B, 0, true, false, false, false)]
+    #[case(255, Target::C, 0, true, false, false, false)]
+    #[case(255, Target::D, 0, true, false, false, false)]
+    #[case(255, Target::E, 0, true, false, false, false)]
+    #[case(255, Target::H, 0, true, false, false, false)]
+    #[case(255, Target::L, 0, true, false, false, false)]
+    #[case(0b1111, Target::A, 0b10000, false, false, true, false)]
+    #[case(0b1111, Target::B, 0b10000, false, false, true, false)]
+    #[case(0b1111, Target::C, 0b10000, false, false, true, false)]
+    #[case(0b1111, Target::D, 0b10000, false, false, true, false)]
+    #[case(0b1111, Target::E, 0b10000, false, false, true, false)]
+    #[case(0b1111, Target::H, 0b10000, false, false, true, false)]
     fn test_inc(
         #[case] reg_value: u8,
         #[case] reg: Target,
@@ -2088,14 +2172,27 @@ mod tests {
             _ => panic!("Unsupported register"),
         };
 
-        assert_eq!(result, expected);
-        assert_eq!(cpu.registers.get_flag(Flag::Zero), expected_zero_flag);
-        assert_eq!(cpu.registers.get_flag(Flag::Sub), expected_sub_flag);
+        assert_eq!(result, expected, "False result");
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Zero),
+            expected_zero_flag,
+            "False zero flag"
+        );
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Sub),
+            expected_sub_flag,
+            "False sub flag"
+        );
         assert_eq!(
             cpu.registers.get_flag(Flag::HalfCarry),
-            expected_half_carry_flag
+            expected_half_carry_flag,
+            "False half carry flag"
         );
-        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag);
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Carry),
+            expected_carry_flag,
+            "False carry flag"
+        );
     }
 
     #[rstest]
@@ -2237,11 +2334,9 @@ mod tests {
             Target::HL => cpu.registers.combined_register(Target::HL),
             Target::D8 => {
                 unimplemented!();
-                0
             }
             Target::A16 => {
                 unimplemented!();
-                0
             }
             _ => panic!("Unsupported register"),
         };
@@ -2339,14 +2434,27 @@ mod tests {
         }
         cpu.sub(reg);
 
-        assert_eq!(cpu.registers.a, expected);
-        assert_eq!(cpu.registers.get_flag(Flag::Zero), expected_zero_flag);
-        assert_eq!(cpu.registers.get_flag(Flag::Sub), expected_sub_flag);
+        assert_eq!(cpu.registers.a, expected, "False result");
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Zero),
+            expected_zero_flag,
+            "False zero flag"
+        );
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Sub),
+            expected_sub_flag,
+            "False sub flag"
+        );
         assert_eq!(
             cpu.registers.get_flag(Flag::HalfCarry),
-            expected_half_carry_flag
+            expected_half_carry_flag,
+            "False half carry flag"
         );
-        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag);
+        assert_eq!(
+            cpu.registers.get_flag(Flag::Carry),
+            expected_carry_flag,
+            "False carry flag"
+        );
     }
 
     #[rstest]
@@ -2377,6 +2485,14 @@ mod tests {
     #[case(Target::H, 1, 0, 0)]
     #[case(Target::L, 1, 0, 0)]
     #[case(Target::HL, 1, 0, 0)]
+    #[case(Target::A, 1, 1, 1)]
+    #[case(Target::B, 1, 1, 1)]
+    #[case(Target::C, 1, 1, 1)]
+    #[case(Target::D, 1, 1, 1)]
+    #[case(Target::E, 1, 1, 1)]
+    #[case(Target::H, 1, 1, 1)]
+    #[case(Target::L, 1, 1, 1)]
+    #[case(Target::HL, 1, 1, 1)]
     fn test_res(
         #[case] reg: Target,
         #[case] reg_value: u8,
@@ -2416,69 +2532,74 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Target::A, 1, 2, 0b10000000, 0)]
-    #[case(Target::B, 1, 2, 0b10000000, 0)]
-    #[case(Target::C, 1, 2, 0b10000000, 0)]
-    #[case(Target::D, 1, 2, 0b10000000, 0)]
-    #[case(Target::E, 1, 2, 0b10000000, 0)]
-    #[case(Target::H, 1, 2, 0b10000000, 0)]
-    #[case(Target::L, 1, 2, 0b10000000, 0)]
+    #[case(Target::A, 1, 2, false, false, false, false)]
+    #[case(Target::B, 1, 2, false, false, false, false)]
+    #[case(Target::C, 1, 2, false, false, false, false)]
+    #[case(Target::D, 1, 2, false, false, false, false)]
+    #[case(Target::E, 1, 2, false, false, false, false)]
+    #[case(Target::H, 1, 2, false, false, false, false)]
+    #[case(Target::L, 1, 2, false, false, false, false)]
+    #[case(Target::HL, 1, 2, false, false, false, false)]
+    #[case(Target::A, 0b10000000, 0, true, false, false, true)]
+    #[case(Target::B, 0b10000000, 0, true, false, false, true)]
+    #[case(Target::C, 0b10000000, 0, true, false, false, true)]
+    #[case(Target::D, 0b10000000, 0, true, false, false, true)]
+    #[case(Target::E, 0b10000000, 0, true, false, false, true)]
+    #[case(Target::H, 0b10000000, 0, true, false, false, true)]
+    #[case(Target::L, 0b10000000, 0, true, false, false, true)]
+    #[case(Target::HL, 0b10000000, 0, true, false, false, true)]
+    #[case(Target::A, 0b1000, 0b10000, false, false, false, false)]
+    #[case(Target::B, 0b1000, 0b10000, false, false, false, false)]
+    #[case(Target::C, 0b1000, 0b10000, false, false, false, false)]
+    #[case(Target::D, 0b1000, 0b10000, false, false, false, false)]
+    #[case(Target::E, 0b1000, 0b10000, false, false, false, false)]
+    #[case(Target::H, 0b1000, 0b10000, false, false, false, false)]
+    #[case(Target::L, 0b1000, 0b10000, false, false, false, false)]
+    #[case(Target::HL, 0b1000, 0b10000, false, false, false, false)]
     fn test_rl(
         #[case] reg: Target,
-        #[case] value1: u8,
-        #[case] expected1: u8,
-        #[case] value2: u8,
-        #[case] expected2: u8,
+        #[case] value: u16,
+        #[case] expected: u16,
+        #[case] expected_zero_flag: bool,
+        #[case] expected_sub_flag: bool,
+        #[case] expected_half_carry_flag: bool,
+        #[case] expected_carry_flag: bool,
     ) {
         let mut cpu = Cpu::new();
 
         match reg {
-            Target::A => cpu.registers.a = value1,
-            Target::B => cpu.registers.b = value1,
-            Target::C => cpu.registers.c = value1,
-            Target::D => cpu.registers.d = value1,
-            Target::E => cpu.registers.e = value1,
-            Target::H => cpu.registers.h = value1,
-            Target::L => cpu.registers.l = value1,
+            Target::A => cpu.registers.a = value as u8,
+            Target::B => cpu.registers.b = value as u8,
+            Target::C => cpu.registers.c = value as u8,
+            Target::D => cpu.registers.d = value as u8,
+            Target::E => cpu.registers.e = value as u8,
+            Target::H => cpu.registers.h = value as u8,
+            Target::L => cpu.registers.l = value as u8,
+            Target::HL => cpu.registers.set_combined_register(Target::HL, value),
             _ => panic!("Unsupported register"),
         }
         cpu.rl(reg);
 
         let result = match reg {
-            Target::A => cpu.registers.a,
-            Target::B => cpu.registers.b,
-            Target::C => cpu.registers.c,
-            Target::D => cpu.registers.d,
-            Target::E => cpu.registers.e,
-            Target::H => cpu.registers.h,
-            Target::L => cpu.registers.l,
+            Target::A => cpu.registers.a as u16,
+            Target::B => cpu.registers.b as u16,
+            Target::C => cpu.registers.c as u16,
+            Target::D => cpu.registers.d as u16,
+            Target::E => cpu.registers.e as u16,
+            Target::H => cpu.registers.h as u16,
+            Target::L => cpu.registers.l as u16,
+            Target::HL => cpu.registers.combined_register(Target::HL),
             _ => panic!("Unsupported register"),
         };
-        assert_eq!(result, expected1);
 
-        match reg {
-            Target::A => cpu.registers.a = value2,
-            Target::B => cpu.registers.b = value2,
-            Target::C => cpu.registers.c = value2,
-            Target::D => cpu.registers.d = value2,
-            Target::E => cpu.registers.e = value2,
-            Target::H => cpu.registers.h = value2,
-            Target::L => cpu.registers.l = value2,
-            _ => panic!("Unsupported register"),
-        }
-        cpu.rl(reg);
-
-        let result = match reg {
-            Target::A => cpu.registers.a,
-            Target::B => cpu.registers.b,
-            Target::C => cpu.registers.c,
-            Target::D => cpu.registers.d,
-            Target::E => cpu.registers.e,
-            Target::H => cpu.registers.h,
-            Target::L => cpu.registers.l,
-            _ => panic!("Unsupported register"),
-        };
-        assert_eq!(cpu.registers.a, expected2);
+        assert_eq!(result, expected);
+        assert_eq!(cpu.registers.get_flag(Flag::Zero), expected_zero_flag);
+        assert_eq!(cpu.registers.get_flag(Flag::Sub), expected_sub_flag);
+        assert_eq!(
+            cpu.registers.get_flag(Flag::HalfCarry),
+            expected_half_carry_flag
+        );
+        assert_eq!(cpu.registers.get_flag(Flag::Carry), expected_carry_flag);
     }
 
     #[test]
