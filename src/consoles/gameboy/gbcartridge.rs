@@ -10,87 +10,61 @@ pub struct GbCartridge {
     data: Vec<u8>,
 }
 
-
 impl GbCartridge {
-    
     pub fn new(path: String) -> GbCartridge {
-
-            
         GbCartridge {
-        
             path: path.clone(),
             data: vec![],
         }
     }
 
-
     pub fn print(&self) {
-
         println!("{:#?}", self.data);
     }
-
 }
 
 impl Cartridge for GbCartridge {
-
-    fn load(&mut self, path: String) -> Result<(), CartridgeNotFoundError>{
-        
-           match fs::read(path.as_str()) {
+    fn load(&mut self, path: String) -> Result<(), CartridgeNotFoundError> {
+        match fs::read(path.as_str()) {
             Ok(v) => {
                 self.data = v;
                 Ok(())
-            },
-            Err(e) => {
-                Err(CartridgeNotFoundError {
-                    what: "Failed to open file: ".to_string() + path.as_str()
-                })
             }
+            Err(e) => Err(CartridgeNotFoundError {
+                what: "Failed to open file: ".to_string() + e.to_string().as_str(),
+            }),
         }
     }
 
     fn dump(&self) -> String {
-        
         let mut dump = String::new();
         let mut data_words = 0;
 
         for i in self.data.iter() {
-
             if data_words > 0 {
-
                 dump = dump + i.to_string().as_str();
 
                 if data_words > 1 {
-
                     dump = dump + ", ";
-                }
-                else {
-                    
+                } else {
                     dump = dump + "\n";
                 }
 
                 data_words -= 1;
-            }
-            else if let Some(instruction) = Instruction::look_up(*i) {
-                
+            } else if let Some(instruction) = Instruction::look_up(*i) {
                 dump = dump + Instruction::mnemonic_as_string(i).as_str() + "\t";
                 data_words = (instruction.length as i8 - 1).max(0);
-                
-                if data_words == 0 {
 
+                if data_words == 0 {
                     dump = dump + "\n";
                 }
             }
         }
 
-
         dump
     }
 
-
     fn as_any(&self) -> &dyn std::any::Any {
-        
         self
     }
-    
 }
-
