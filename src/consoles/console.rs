@@ -27,7 +27,7 @@ impl Error for NoConsolePresentError {}
 
 pub fn create_for(cart: impl Cartridge) -> Result<impl Console, Box<dyn Error>> {
     if let Some(cartridge) = cart.as_any().downcast_ref::<GbCartridge>() {
-        Ok(GameBoy::new(cartridge))
+        Ok(GameBoy::new(cartridge.clone()))
     } else {
         Err(Box::new(NoConsolePresentError {
             what: String::from("No Console present for the rom provided"),

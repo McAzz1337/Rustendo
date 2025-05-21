@@ -1,21 +1,27 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use super::super::console::Console;
 use super::gbcartridge::GbCartridge;
+use crate::consoles::bus::Bus;
 use crate::consoles::gameboy::cpu::Cpu;
 use crate::consoles::gameboy::memory::Memory;
 use crate::utils::conversion::u16_to_u8;
 
 pub struct GameBoy {
     cpu: Cpu,
-    memory: Memory<u16, u8, u16>,
-    cartridge: GbCartridge,
 }
 
 impl GameBoy {
-    pub fn new(cartridge: &GbCartridge) -> GameBoy {
+    pub fn new(cartridge: GbCartridge) -> GameBoy {
+        let memory = Rc::new(RefCell::new(Memory::<u16, u8, u16>::new(u16_to_u8)));
+        let mut bus = Bus::<u16, u8, u16>::new();
+        bus.connect_readable(memory.clone());
+        bus.connect_writeable(memory);
+        bus.connect_readable(Rc::new(RefCell::new(cartridge)));
+        let bus = Rc::new(RefCell::new(bus));
         GameBoy {
-            cpu: Cpu::new(),
-            memory: Memory::<u16, u8, u16>::new(u16_to_u8),
-            cartridge: cartridge.clone(),
+            cpu: Cpu::new(bus.clone()),
         }
     }
 }

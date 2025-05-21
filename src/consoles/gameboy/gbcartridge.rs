@@ -1,5 +1,9 @@
 use std::fs;
 
+use crate::consoles::addressable::Addressable;
+use crate::consoles::bus::ReadDevice;
+use crate::consoles::readable::Readable;
+
 use super::super::cartridge::Cartridge;
 use super::super::cartridge::CartridgeNotFoundError;
 use super::instruction::Instruction;
@@ -66,5 +70,19 @@ impl Cartridge for GbCartridge {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+impl ReadDevice<u16, u8> for GbCartridge {}
+
+impl Readable<u16, u8> for GbCartridge {
+    fn read(&self, address: u16) -> Result<u8, Box<dyn std::error::Error>> {
+        Ok(self.data[address as usize])
+    }
+}
+
+impl Addressable<u16> for GbCartridge {
+    fn in_range(&self, address: u16) -> bool {
+        todo!()
     }
 }

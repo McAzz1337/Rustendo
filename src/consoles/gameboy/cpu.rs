@@ -41,7 +41,7 @@ macro_rules! panic_or_print {
 #[allow(dead_code)]
 pub struct Cpu {
     registers: Registers,
-    bus: Bus<u16, u8, u16>,
+    bus: Rc<RefCell<Bus<u16, u8, u16>>>,
     pc: u16,
     sp: u16,
     addr: u16,
@@ -52,11 +52,7 @@ pub struct Cpu {
 
 #[allow(dead_code, unused_assignments)]
 impl Cpu {
-    pub fn new() -> Cpu {
-        let mut bus = Bus::new();
-        let memory = Rc::new(RefCell::new(Memory::<u16, u8, u16>::new(u16_to_u8)));
-        bus.connect_readable(memory.clone());
-        bus.connect_writeable(memory);
+    pub fn new(bus: Rc<RefCell<Bus<u16, u8, u16>>>) -> Cpu {
         Cpu {
             registers: Registers::new(),
             bus,
@@ -110,7 +106,7 @@ impl Cpu {
 
     pub fn load_program(&mut self, program: Vec<u8>) {
         for i in 0..program.len() {
-            let _ = self.bus.write(i as u16, program[i]);
+            let _ = self.bus.borrow_mut().write(i as u16, program[i]);
         }
     }
 
@@ -272,22 +268,22 @@ impl Cpu {
     }
 
     pub fn write_to_memory(&mut self, address: u16, byte: u8) {
-        let _ = self.bus.write(address, byte);
+        let _ = self.bus.borrow_mut().write(address, byte);
     }
 
     pub fn read_memory(&self, address: u16) -> u8 {
-        self.bus.read(address).unwrap()
+        self.bus.borrow().read(address).unwrap()
     }
 
     pub fn zero_memory(&mut self) {
         for i in 0..0xFFFF {
-            let _ = self.bus.write(i, 0);
+            let _ = self.bus.borrow_mut().write(i, 0);
         }
     }
 
     pub fn set_memory_to_end_of_program(&mut self) {
         for i in 0..0xFFFF {
-            let _ = self.bus.write(
+            let _ = self.bus.borrow_mut().write(
                 i,
                 Instruction::byte_from_opcode(OpCode::EndOfProgram).unwrap(),
             );
@@ -295,7 +291,7 @@ impl Cpu {
     }
 
     pub fn tick(&mut self) -> bool {
-        let instruction_byte = self.bus.read(self.pc).unwrap();
+        let instruction_byte = self.bus.borrow().read(self.pc).unwrap();
 
         if instruction_byte == Instruction::byte_from_opcode(OpCode::EndOfProgram).unwrap() {
             return false;
@@ -522,9 +518,10 @@ impl Cpu {
             Target::L => self.registers.l,
             Target::HL => self
                 .bus
+                .borrow()
                 .read(self.registers.combined_register(reg))
                 .unwrap(),
-            Target::D8 => self.bus.read(self.pc + 1).unwrap(),
+            Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::ADC(reg)));
             }
@@ -561,9 +558,10 @@ impl Cpu {
             Target::H => self.registers.h,
             Target::HL => self
                 .bus
+                .borrow()
                 .read(self.registers.combined_register(Target::HL))
                 .unwrap(),
-            Target::D8 => self.bus.read(self.pc + 1).unwrap(),
+            Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::ADD(src)));
             }
@@ -594,7 +592,7 @@ impl Cpu {
             Target::BC => self.registers.combined_register(src),
             Target::DE => self.registers.combined_register(src),
             Target::SP => self.sp,
-            Target::R8 => self.bus.read(self.pc + 1).unwrap() as u16,
+            Target::R8 => self.bus.borrow().read(self.pc + 1).unwrap() as u16,
             _ => {
                 panic_or_print!(
                     "Unimplemented {}",
@@ -646,10 +644,11 @@ impl Cpu {
             Target::HL => {
                 self.registers.a &= self
                     .bus
+                    .borrow()
                     .read(self.registers.combined_register(src))
                     .unwrap()
             }
-            Target::D8 => self.registers.a &= self.bus.read(self.pc + 1).unwrap(),
+            Target::D8 => self.registers.a &= self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::AND(src)));
             }
@@ -676,6 +675,7 @@ impl Cpu {
             Target::L => self.registers.l,
             Target::HL => self
                 .bus
+                .borrow()
                 .read(self.registers.combined_register(Target::HL))
                 .unwrap(),
             _ => {
@@ -702,13 +702,17 @@ impl Cpu {
         if self.registers.get_flag(flag) {
             let _ = self
                 .bus
+                .borrow_mut()
                 .write(self.sp - 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
-            let _ = self.bus.write(self.sp, (self.pc & 0b11111111) as u8);
+            let _ = self
+                .bus
+                .borrow_mut()
+                .write(self.sp, (self.pc & 0b11111111) as u8);
 
             self.sp = self.sp.wrapping_sub(2);
 
-            self.pc = ((self.bus.read(self.pc + 2).unwrap() as u16) << 8)
-                | self.bus.read(self.pc + 1).unwrap() as u16;
+            self.pc = ((self.bus.borrow().read(self.pc + 2).unwrap() as u16) << 8)
+                | self.bus.borrow().read(self.pc + 1).unwrap() as u16;
 
             true
         } else {
@@ -727,7 +731,7 @@ impl Cpu {
             Target::H => self.registers.h as u16,
             Target::L => self.registers.l as u16,
             Target::HL => ((self.registers.h as u16) << 8) | self.registers.l as u16,
-            Target::D8 => self.bus.read(self.pc + 1).unwrap() as u16,
+            Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap() as u16,
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::CP(reg)));
             }
@@ -903,15 +907,15 @@ impl Cpu {
     }
 
     fn jp(&mut self) {
-        let lower_byte = self.bus.read(self.pc + 1).unwrap() as u16;
-        let upper_byte = self.bus.read(self.pc + 2).unwrap() as u16;
+        let lower_byte = self.bus.borrow().read(self.pc + 1).unwrap() as u16;
+        let upper_byte = self.bus.borrow().read(self.pc + 2).unwrap() as u16;
         self.pc = (upper_byte << 8) + lower_byte
     }
 
     fn jump_by_flag(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = ((self.bus.read(self.pc + 2).unwrap() as u16) << 8)
-                | self.bus.read(self.pc + 1).unwrap() as u16;
+            self.pc = ((self.bus.borrow().read(self.pc + 2).unwrap() as u16) << 8)
+                | self.bus.borrow().read(self.pc + 1).unwrap() as u16;
             true
         } else {
             false
@@ -919,12 +923,12 @@ impl Cpu {
     }
 
     fn jruc(&mut self) {
-        self.pc = self.pc + self.bus.read(self.pc + 1).unwrap() as u16;
+        self.pc = self.pc + self.bus.borrow().read(self.pc + 1).unwrap() as u16;
     }
 
     fn jr(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = self.pc + self.bus.read(self.pc + 1).unwrap() as u16;
+            self.pc = self.pc + self.bus.borrow().read(self.pc + 1).unwrap() as u16;
             true
         } else {
             false
@@ -948,24 +952,28 @@ impl Cpu {
             Target::H => self.registers.h,
             Target::HL | Target::BC | Target::DE => self
                 .bus
+                .borrow()
                 .read(self.registers.combined_register(src))
                 .unwrap(),
             Target::A8 => self
                 .bus
-                .read(0xFF00 + self.bus.read(self.pc + 1).unwrap() as u16)
+                .borrow()
+                .read(0xFF00 + self.bus.borrow().read(self.pc + 1).unwrap() as u16)
                 .unwrap(),
             Target::A16 => self
                 .bus
+                .borrow()
                 .read(
-                    (self.bus.read(self.pc + 1).unwrap() as u16) << 8
-                        | self.bus.read(self.pc + 2).unwrap() as u16,
+                    (self.bus.borrow().read(self.pc + 1).unwrap() as u16) << 8
+                        | self.bus.borrow().read(self.pc + 2).unwrap() as u16,
                 )
                 .unwrap(),
             Target::R8 => self
                 .bus
-                .read(self.pc + self.bus.read(self.pc + 1).unwrap() as u16)
+                .borrow()
+                .read(self.pc + self.bus.borrow().read(self.pc + 1).unwrap() as u16)
                 .unwrap(),
-            Target::D8 => self.bus.read(self.pc + 1).unwrap(),
+            Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
             }
@@ -984,16 +992,15 @@ impl Cpu {
             Target::BC => self.registers.set_combined_register(Target::BC, v as u16),
             Target::DE => self.registers.set_combined_register(Target::DE, v as u16),
             Target::A8 => {
-                let _ = self
-                    .bus
-                    .write(0xFF00 + self.bus.read(self.pc + 1).unwrap() as u16, v);
+                let mut bus = self.bus.borrow_mut();
+                let addr = 0xFF00 + bus.read(self.pc + 1).unwrap() as u16;
+                let _ = bus.write(addr, v);
             }
             Target::A16 => {
-                let _ = self.bus.write(
-                    (self.bus.read(self.pc + 1).unwrap() as u16) << 8
-                        | self.bus.read(self.pc + 2).unwrap() as u16,
-                    v,
-                );
+                let mut bus = self.bus.borrow_mut();
+                let addr = (bus.read(self.pc + 1).unwrap() as u16) << 8
+                    | bus.read(self.pc + 2).unwrap() as u16;
+                let _ = bus.write(addr, v);
             }
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
@@ -1012,28 +1019,32 @@ impl Cpu {
             Target::L => self.registers.l as u16,
             Target::HL | Target::BC | Target::DE => self
                 .bus
+                .borrow()
                 .read(self.registers.combined_register(src))
                 .unwrap() as u16,
             Target::A8 => self
                 .bus
-                .read(0xFF00 + self.bus.read(self.pc + 1).unwrap() as u16)
+                .borrow()
+                .read(0xFF00 + self.bus.borrow().read(self.pc + 1).unwrap() as u16)
                 .unwrap() as u16,
             Target::A16 => self
                 .bus
+                .borrow()
                 .read(
-                    ((self.bus.read(self.pc + 1).unwrap() as u16) << 8)
-                        + self.bus.read(self.pc + 2).unwrap() as u16,
+                    ((self.bus.borrow().read(self.pc + 1).unwrap() as u16) << 8)
+                        + self.bus.borrow().read(self.pc + 2).unwrap() as u16,
                 )
                 .unwrap() as u16,
-            Target::D8 => self.bus.read(self.pc + 1).unwrap() as u16,
+            Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap() as u16,
             Target::D16 => {
-                ((self.bus.read(self.pc + 1).unwrap() as u16) << 8)
-                    + (self.bus.read(self.pc + 2).unwrap() as u16)
+                ((self.bus.borrow().read(self.pc + 1).unwrap() as u16) << 8)
+                    + (self.bus.borrow().read(self.pc + 2).unwrap() as u16)
             }
             Target::SP => self.sp,
             Target::SP_R8 => self
                 .bus
-                .read(self.sp + self.bus.read(self.pc + 1).unwrap() as u16)
+                .borrow()
+                .read(self.sp + self.bus.borrow().read(self.pc + 1).unwrap() as u16)
                 .unwrap() as u16,
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
@@ -1042,30 +1053,31 @@ impl Cpu {
 
         match dst {
             Target::HL | Target::BC | Target::DE => {
-                let _ = self.bus.write_16(
+                let _ = self.bus.borrow_mut().write_16(
                     self.bus
+                        .borrow()
                         .read(self.registers.combined_register(dst))
                         .unwrap() as u16,
                     v,
                 );
             }
             Target::A8 => {
-                let _ = self
-                    .bus
-                    .write_16(0xFF00 + self.bus.read(self.pc + 1).unwrap() as u16, v);
+                let mut bus = self.bus.borrow_mut();
+                let addr = 0xFF00 + bus.read(self.pc + 1).unwrap() as u16;
+                let _ = bus.write_16(addr, v);
             }
             Target::A16 => {
-                let _ = self.bus.write_16(
-                    ((self.bus.read(self.pc + 1).unwrap() as u16) << 8)
-                        + self.bus.read(self.pc + 2).unwrap() as u16,
+                let _ = self.bus.borrow_mut().write_16(
+                    ((self.bus.borrow().read(self.pc + 1).unwrap() as u16) << 8)
+                        + self.bus.borrow().read(self.pc + 2).unwrap() as u16,
                     v,
                 );
             }
             Target::SP => self.sp = v,
             Target::SP_R8 => {
-                let _ = self
-                    .bus
-                    .write_16(self.sp + self.bus.read(self.pc + 1).unwrap() as u16, v);
+                let mut bus = self.bus.borrow_mut();
+                let addr = self.sp + bus.read(self.pc + 1).unwrap() as u16;
+                let _ = bus.write_16(addr, v);
             }
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
@@ -1088,7 +1100,7 @@ impl Cpu {
                 self.registers.a =
                     (self.registers.a as u16 | self.registers.combined_register(Target::HL)) as u8
             }
-            Target::D8 => self.registers.a |= self.bus.read(self.pc + 1).unwrap(),
+            Target::D8 => self.registers.a |= self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::OR(src)));
             }
@@ -1102,8 +1114,8 @@ impl Cpu {
     }
 
     fn pop(&mut self, target: Target) {
-        let v = ((self.bus.read(self.sp + 1).unwrap() as u16) << 8)
-            | self.bus.read(self.sp + 2).unwrap() as u16;
+        let v = ((self.bus.borrow().read(self.sp + 1).unwrap() as u16) << 8)
+            | self.bus.borrow().read(self.sp + 2).unwrap() as u16;
 
         self.sp = self.sp.wrapping_add(2);
 
@@ -1127,10 +1139,9 @@ impl Cpu {
             }
         };
 
-        let _ = self.bus.write(self.sp, (v & 0b11111111) as u8);
-        let _ = self
-            .bus
-            .write(self.sp - 1, ((v & 0b1111111100000000) >> 8) as u8);
+        let mut bus = self.bus.borrow_mut();
+        let _ = bus.write(self.sp, (v & 0b11111111) as u8);
+        let _ = bus.write(self.sp - 1, ((v & 0b1111111100000000) >> 8) as u8);
 
         self.sp = self.sp.wrapping_sub(2);
     }
@@ -1159,8 +1170,8 @@ impl Cpu {
 
     fn ret(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = ((self.bus.read(self.sp + 1).unwrap() as u16) << 8)
-                | (self.bus.read(self.sp + 2).unwrap() as u16);
+            self.pc = ((self.bus.borrow().read(self.sp + 1).unwrap() as u16) << 8)
+                | (self.bus.borrow().read(self.sp + 2).unwrap() as u16);
             self.sp = self.sp.wrapping_add(2);
 
             true
@@ -1410,8 +1421,12 @@ impl Cpu {
     fn rst(&mut self, address: u16) {
         let _ = self
             .bus
+            .borrow_mut()
             .write(self.sp - 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
-        let _ = self.bus.write(self.sp, (self.pc & 0b11111111) as u8);
+        let _ = self
+            .bus
+            .borrow_mut()
+            .write(self.sp, (self.pc & 0b11111111) as u8);
 
         self.sp = self.sp.wrapping_sub(2);
 
@@ -1429,9 +1444,10 @@ impl Cpu {
             Target::L => self.registers.l,
             Target::HL => self
                 .bus
+                .borrow()
                 .read(self.registers.combined_register(reg))
                 .unwrap(),
-            Target::D8 => self.bus.read(self.pc + 1).unwrap(),
+            Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SBC(reg)));
             }
@@ -1593,7 +1609,7 @@ impl Cpu {
             Target::L => self.registers.l,
             Target::H => self.registers.h,
             Target::HL => self.registers.combined_register(Target::HL) as u8,
-            Target::D8 => self.bus.read(self.pc + 1).unwrap(),
+            Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SUB(src)));
             }
@@ -1650,10 +1666,11 @@ impl Cpu {
             Target::HL => {
                 self.registers.a ^= self
                     .bus
+                    .borrow()
                     .read(self.registers.combined_register(src))
                     .unwrap()
             }
-            Target::D8 => self.registers.a ^= self.bus.read(self.pc + 1).unwrap(),
+            Target::D8 => self.registers.a ^= self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
                 panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::XOR(src)));
             }
@@ -1704,18 +1721,33 @@ impl Cpu {
 #[cfg(test)]
 mod tests {
     use core::panic;
+    use std::{cell::RefCell, rc::Rc};
 
     use rstest::rstest;
 
-    use crate::consoles::{
-        gameboy::{
-            cpu::Cpu,
-            registers::{Flag, ZERO_BIT_POS},
-            target::Target,
+    use crate::{
+        consoles::{
+            bus::Bus,
+            gameboy::{
+                cpu::Cpu,
+                memory::Memory,
+                registers::{Flag, ZERO_BIT_POS},
+                target::Target,
+            },
+            readable::Readable,
+            writeable::Writeable,
         },
-        readable::Readable,
-        writeable::Writeable,
+        utils::conversion::u16_to_u8,
     };
+
+    fn setup() -> Cpu {
+        let memory = Rc::new(RefCell::new(Memory::<u16, u8, u16>::new(u16_to_u8)));
+        let mut bus = Bus::<u16, u8, u16>::new();
+        bus.connect_readable(memory.clone());
+        bus.connect_writeable(memory);
+        let bus = Rc::new(RefCell::new(bus));
+        Cpu::new(bus.clone())
+    }
 
     #[rstest]
     #[case(Target::A, true, 3)]
@@ -1734,7 +1766,7 @@ mod tests {
     #[case(Target::HL, true, 0)]
     #[case(Target::HL, false, 255)]
     fn test_adc(#[case] src: Target, #[case] carry: bool, #[case] expected: u8) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.set_flag(Flag::Carry, carry);
         cpu.registers.a = 254;
@@ -1747,7 +1779,7 @@ mod tests {
             Target::H => cpu.registers.h = 1,
             Target::L => cpu.registers.l = 1,
             Target::HL => {
-                let _ = cpu.bus.write(100, 1);
+                let _ = cpu.bus.borrow_mut().write(100, 1);
                 cpu.registers.set_combined_register(Target::HL, 100);
             }
             _ => panic!("Unsupported register"),
@@ -1787,7 +1819,7 @@ mod tests {
         #[case] expected_carry_flag: bool,
         #[case] expected_half_carry_flag: bool,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = val_a;
         match src {
@@ -1798,7 +1830,7 @@ mod tests {
             Target::H => cpu.registers.h = val_b,
             Target::L => cpu.registers.l = val_b,
             Target::HL => {
-                let _ = cpu.bus.write(100, val_b);
+                let _ = cpu.bus.borrow_mut().write(100, val_b);
                 cpu.registers.set_combined_register(Target::HL, 100);
             }
             _ => panic!("Unsupported register"),
@@ -1836,7 +1868,7 @@ mod tests {
         #[case] expeced_upper: u8,
         #[case] expected_lower: u8,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         match src {
             Target::BC => {
@@ -1899,7 +1931,7 @@ mod tests {
         #[case] expected: u8,
         #[case] expected_zero_flag: bool,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = a_value;
         match src {
@@ -1910,7 +1942,7 @@ mod tests {
             Target::H => cpu.registers.h = src_value,
             Target::L => cpu.registers.l = src_value,
             Target::HL => {
-                let _ = cpu.bus.write(100, src_value);
+                let _ = cpu.bus.borrow_mut().write(100, src_value);
                 cpu.registers.set_combined_register(Target::HL, 100);
             }
             _ => panic!("Unsupported register"),
@@ -1950,7 +1982,7 @@ mod tests {
         #[case] expected_carry_flag: bool,
         #[case] expected_half_carry_flag: bool,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         match src {
             Target::A => cpu.registers.a = value,
@@ -1961,7 +1993,7 @@ mod tests {
             Target::H => cpu.registers.h = value,
             Target::L => cpu.registers.l = value,
             Target::HL => {
-                let _ = cpu.bus.write(100, value);
+                let _ = cpu.bus.borrow_mut().write(100, value);
                 cpu.registers.set_combined_register(Target::HL, 100);
             }
             _ => panic!("Unsupported register"),
@@ -1979,15 +2011,19 @@ mod tests {
 
     #[test]
     fn test_call_and_ret() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         eprintln!("pc = {}", cpu.pc);
         let address1 = cpu.pc + 10;
         let address2 = cpu.pc;
 
-        let _ = cpu.bus.write(cpu.pc + 1, (address1 & 0b11111111) as u8);
         let _ = cpu
             .bus
+            .borrow_mut()
+            .write(cpu.pc + 1, (address1 & 0b11111111) as u8);
+        let _ = cpu
+            .bus
+            .borrow_mut()
             .write(cpu.pc + 2, ((address1 & 0b1111111100000000) >> 8) as u8);
         assert!(cpu.call(Flag::NotZero));
         assert_eq!(cpu.pc, address1);
@@ -2007,7 +2043,7 @@ mod tests {
     #[case(64, 0b10111111)]
     #[case(128, 0b01111111)]
     fn test_cpl(#[case] a_value: u8, #[case] expected: u8) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = a_value;
         cpu.cpl();
@@ -2045,7 +2081,7 @@ mod tests {
         #[case] expected_half_carry_flag: bool,
         #[case] expected_carry_flag: bool,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
         match reg {
             Target::A => cpu.registers.a = reg_value,
             Target::B => cpu.registers.b = reg_value,
@@ -2102,7 +2138,7 @@ mod tests {
     #[case(0b100000000, Target::DE, 0b11111111)]
     #[case(0b100000000, Target::SP, 0b11111111)]
     fn test_dec_16(#[case] reg_value: u16, #[case] reg: Target, #[case] expected: u16) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         if reg == Target::SP {
             cpu.sp = reg_value;
@@ -2149,7 +2185,7 @@ mod tests {
         #[case] expected_half_carry_flag: bool,
         #[case] expected_carry_flag: bool,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
         match reg {
             Target::A => cpu.registers.a = reg_value,
             Target::B => cpu.registers.b = reg_value,
@@ -2206,7 +2242,7 @@ mod tests {
     #[case(0, Target::SP, 1)]
     #[case(0xFFFF, Target::SP, 0)]
     fn test_inc_16(#[case] reg_value: u16, #[case] reg: Target, #[case] expected: u16) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
         if reg == Target::SP {
             cpu.sp = reg_value;
         } else {
@@ -2234,11 +2270,14 @@ mod tests {
 
     #[test]
     fn test_jump() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         let address = 100_u16;
-        let _ = cpu.bus.write(cpu.pc + 1, (address & 0xFF) as u8);
-        let _ = cpu.bus.write(cpu.pc + 2, (address >> 8) as u8);
+        let _ = cpu
+            .bus
+            .borrow_mut()
+            .write(cpu.pc + 1, (address & 0xFF) as u8);
+        let _ = cpu.bus.borrow_mut().write(cpu.pc + 2, (address >> 8) as u8);
         cpu.jp();
 
         assert_eq!(cpu.pc, 100);
@@ -2246,7 +2285,7 @@ mod tests {
 
     #[test]
     fn test_jump_hl() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers
             .set_combined_register(Target::HL, 0b0000001010001000);
@@ -2266,14 +2305,14 @@ mod tests {
         #[case] flag_value: bool,
         #[case] jump_flag: Flag,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.zero_memory();
 
         let initial = cpu.pc as u8;
 
-        let _ = cpu.bus.write(cpu.pc + 1, initial + 255);
-        let _ = cpu.bus.write(cpu.pc + 2, initial);
+        let _ = cpu.bus.borrow_mut().write(cpu.pc + 1, initial + 255);
+        let _ = cpu.bus.borrow_mut().write(cpu.pc + 2, initial);
         cpu.registers.set_flag(flag_to_set, flag_value);
         cpu.jump_by_flag(jump_flag);
 
@@ -2282,7 +2321,7 @@ mod tests {
 
     #[test]
     fn test_jruc() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         let initial = cpu.pc as u8;
         cpu.write_to_memory(cpu.pc + 1, initial + 100);
@@ -2297,7 +2336,7 @@ mod tests {
     #[case(Flag::Carry, true, Flag::Carry)]
     #[case(Flag::Carry, false, Flag::NotCarry)]
     fn test_jr(#[case] flag_to_set: Flag, #[case] flag_value: bool, #[case] jump_flag: Flag) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         let initial = cpu.pc as u8;
         cpu.write_to_memory(cpu.pc + 1, initial + 100);
@@ -2319,7 +2358,7 @@ mod tests {
     #[case(Target::DE)]
     #[case(Target::HL)]
     fn test_load(#[case] dst: Target) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
         cpu.registers.a = 100;
         cpu.load(dst, Target::A);
         let result = match dst {
@@ -2354,7 +2393,7 @@ mod tests {
     #[case(Target::L, 7)]
     #[case(Target::HL, 7)]
     fn test_or(#[case] reg: Target, #[case] expected: u8) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = 3;
         match reg {
@@ -2375,15 +2414,15 @@ mod tests {
 
     #[test]
     fn test_push_and_pop() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers
             .set_combined_register(Target::HL, 0b1000100000010001);
 
         cpu.push(Target::HL);
 
-        assert_eq!(cpu.bus.read(cpu.sp + 1).unwrap(), 0b10001000);
-        assert_eq!(cpu.bus.read(cpu.sp + 2).unwrap(), 0b00010001);
+        assert_eq!(cpu.bus.borrow().read(cpu.sp + 1).unwrap(), 0b10001000);
+        assert_eq!(cpu.bus.borrow().read(cpu.sp + 2).unwrap(), 0b00010001);
 
         cpu.pop(Target::BC);
 
@@ -2417,7 +2456,7 @@ mod tests {
         #[case] expected_half_carry_flag: bool,
         #[case] expected_carry_flag: bool,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = 10;
         match reg {
@@ -2464,7 +2503,7 @@ mod tests {
     #[case(Flag::HalfCarry)]
     #[case(Flag::Carry)]
     fn test_flags(#[case] flag: Flag) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         let value = cpu.registers.get_flag(flag);
         cpu.registers.set_flag(flag, !value);
@@ -2500,7 +2539,7 @@ mod tests {
         #[case] bit_pos: u8,
         #[case] expected: u8,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         match reg {
             Target::A => cpu.registers.a = reg_value,
@@ -2566,7 +2605,7 @@ mod tests {
         #[case] expected_half_carry_flag: bool,
         #[case] expected_carry_flag: bool,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         match reg {
             Target::A => cpu.registers.a = value as u8,
@@ -2605,7 +2644,7 @@ mod tests {
 
     #[test]
     fn test_rla() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = 0b10000000;
         cpu.rla();
@@ -2621,7 +2660,7 @@ mod tests {
 
     #[test]
     fn test_rlc() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.set_flag(Flag::Carry, true);
         cpu.registers.a = 1;
@@ -2654,7 +2693,7 @@ mod tests {
         #[case] expected2: u8,
         #[case] expected_carry_flag2: bool,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         match reg {
             Target::A => cpu.registers.a = value1,
@@ -2718,7 +2757,7 @@ mod tests {
 
     #[test]
     fn test_rra() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = 1;
         cpu.rra();
@@ -2749,7 +2788,7 @@ mod tests {
         #[case] expected2: u8,
         #[case] expected_flag2: bool,
     ) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.set_flag(Flag::Carry, flag);
         match reg {
@@ -2800,7 +2839,7 @@ mod tests {
 
     #[test]
     fn test_rrca() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = 1;
         cpu.rrca();
@@ -2823,7 +2862,7 @@ mod tests {
     #[case(Target::L, true, 1, 0xFF)]
     #[case(Target::L, false, 1, 0)]
     fn test_sbc(#[case] reg: Target, #[case] flag: bool, #[case] value: u8, #[case] expected: u8) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.set_flag(Flag::Carry, flag);
         cpu.registers.a = 1;
@@ -2851,7 +2890,7 @@ mod tests {
     #[case(Target::H, 7)]
     #[case(Target::L, 7)]
     fn test_set(#[case] reg: Target, #[case] bit_pos: u8) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.set(bit_pos, reg);
 
@@ -2877,7 +2916,7 @@ mod tests {
     #[case(Target::H)]
     #[case(Target::L)]
     fn test_sl(#[case] reg: Target) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         match reg {
             Target::A => cpu.registers.a = 1,
@@ -2930,7 +2969,7 @@ mod tests {
 
     #[test]
     fn test_sla() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = 1;
         cpu.sla(Target::A);
@@ -2947,7 +2986,7 @@ mod tests {
     #[case(Target::H)]
     #[case(Target::L)]
     fn test_sr(#[case] reg: Target) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         match reg {
             Target::A => cpu.registers.a = 2,
@@ -2990,7 +3029,7 @@ mod tests {
 
     #[test]
     fn test_sra() {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = 0b10000000;
         cpu.sra(Target::A);
@@ -3007,7 +3046,7 @@ mod tests {
     #[case(Target::H)]
     #[case(Target::L)]
     fn test_swap(#[case] reg: Target) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         match reg {
             Target::A => cpu.registers.a = 128 + 4,
@@ -3043,7 +3082,7 @@ mod tests {
     #[case(Target::H, 6)]
     #[case(Target::L, 6)]
     fn test_xor(#[case] reg: Target, #[case] expected: u8) {
-        let mut cpu = Cpu::new();
+        let mut cpu = setup();
 
         cpu.registers.a = 3;
         match reg {
