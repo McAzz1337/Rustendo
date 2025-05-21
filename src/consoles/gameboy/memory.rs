@@ -1,4 +1,9 @@
 use std::error::Error;
+use std::fmt::{Debug, Display, LowerHex};
+use std::marker::PhantomData;
+use std::ops::{Add, BitAnd, Shr};
+
+use num_traits::{AsPrimitive, FromPrimitive, NumCast, ToPrimitive};
 
 use super::instruction::{Instruction, INSTRUCTIONS};
 use super::opcode::OpCode::EndOfProgram;
@@ -6,7 +11,7 @@ use crate::consoles::addressable::Addressable;
 use crate::consoles::bus::{ReadDevice, WriteDevice};
 use crate::consoles::readable::Readable;
 use crate::consoles::writeable::Writeable;
-use crate::utils::conversion;
+use crate::utils::conversion::u16_to_u8;
 
 pub const INTERRPUT_ENABLE: u16 = 0xFFFF;
 pub const INTERNAL_RAM: u16 = 0xFF80;
@@ -34,37 +39,75 @@ lazy_static! {
         0xB9, 0x33, 0x3E,
     ];
 }
-pub struct Memory {
-    size: usize,
-    memory: [u8; 0x10000],
+
+#[derive(Debug)]
+enum MemoryError<A> {
+    ReadError(A),
+    WriteError(A),
 }
-impl Memory {
-    pub fn new() -> Memory {
-        let mut memory = Memory {
+
+impl<A> Display for MemoryError<A>
+where
+    A: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::ReadError(addr) => &format!("Failed to read from address: {:?}", addr),
+            Self::WriteError(addr) => &format!("Failed to write to address: {:?}", addr),
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl<A> Error for MemoryError<A> where A: Debug {}
+
+pub struct Memory<A, V, DV> {
+    address_type: PhantomData<A>,
+    d_value_type: PhantomData<DV>,
+    size: usize,
+    memory: [V; 0x10000],
+    conversion: fn(DV) -> Option<(V, V)>,
+}
+
+impl<A, V, DV> Memory<A, V, DV>
+where
+    A: NumCast + Copy + Clone + Debug + 'static,
+    V: LowerHex
+        + PartialEq
+        + Display
+        + Default
+        + Copy
+        + FromPrimitive
+        + NumCast
+        + ToPrimitive
+        + AsPrimitive<V>,
+    DV: NumCast + Shr<i32> + BitAnd<u16>,
+{
+    pub fn new(conversion: fn(DV) -> Option<(V, V)>) -> Self {
+        let mut memory = Memory::<A, V, DV> {
+            address_type: PhantomData,
+            d_value_type: PhantomData,
             size: 0x10000,
-            memory: [0; 0x10000],
+            memory: [V::default(); 0x10000],
+            conversion,
         };
 
         (0..memory.size).into_iter().for_each(|i| {
-            let _ = memory.write(
-                i as u16,
-                Instruction::byte_from_opcode(EndOfProgram).unwrap(),
+            let _ = <Memory<A, V, DV> as Writeable<A, V, DV>>::write(
+                &mut memory,
+                NumCast::from(i as u16).unwrap(),
+                NumCast::from(Instruction::byte_from_opcode(EndOfProgram).unwrap()).unwrap(),
             );
         });
 
         (0..NINTENDO_SPLASH_SCREEN.len()).into_iter().for_each(|i| {
-            let _ = memory.write(i as u16 + 104, NINTENDO_SPLASH_SCREEN[i]);
+            let _ = memory.write(
+                NumCast::from(i as u16 + 104).unwrap(),
+                NumCast::from(NINTENDO_SPLASH_SCREEN[i]).unwrap(),
+            );
         });
 
         memory
-    }
-
-    pub fn read_as_binary_string(&self, address: u16) -> String {
-        conversion::u8_as_bit_string(self.memory[address as usize])
-    }
-
-    pub fn read_as_hex_strign(&self, address: u16) -> String {
-        conversion::u8_as_hex_string(self.memory[address as usize])
     }
 
     pub fn get_size(&self) -> usize {
@@ -81,13 +124,19 @@ impl Memory {
                     println!();
                 }
                 data_words -= 1;
-            } else if let Some(ins) = Instruction::look_up(self.memory[i]) {
+            } else if let Some(ins) = Instruction::look_up(NumCast::from(self.memory[i]).unwrap()) {
                 data_words = ins.length - 1;
 
                 if data_words > 0 {
-                    print!("{}\t", Instruction::mnemonic_as_string(&self.memory[i]));
+                    print!(
+                        "{}\t",
+                        Instruction::mnemonic_as_string(&NumCast::from(self.memory[i]).unwrap())
+                    );
                 } else {
-                    println!("{}", Instruction::mnemonic_as_string(&self.memory[i]));
+                    println!(
+                        "{}",
+                        Instruction::mnemonic_as_string(&NumCast::from(self.memory[i]).unwrap())
+                    );
                 }
             }
         }
@@ -103,14 +152,17 @@ impl Memory {
                     buffer.push(line.clone());
                 }
                 data_words -= 1;
-            } else if let Some(ins) = Instruction::look_up(self.memory[i]) {
+            } else if let Some(ins) = Instruction::look_up(NumCast::from(self.memory[i]).unwrap()) {
                 data_words = ins.length;
 
                 if data_words > 0 {
                     data_words -= 1;
-                    line = Instruction::mnemonic_as_string(&self.memory[i]) + "\t";
+                    line = Instruction::mnemonic_as_string(&NumCast::from(self.memory[i]).unwrap())
+                        + "\t";
                 } else {
-                    buffer.push(Instruction::mnemonic_as_string(&self.memory[i]));
+                    buffer.push(Instruction::mnemonic_as_string(
+                        &NumCast::from(self.memory[i]).unwrap(),
+                    ));
                 }
             }
         }
@@ -120,7 +172,9 @@ impl Memory {
         println!("MEMORY:");
         let mut has_data = false;
         for i in 0..self.size {
-            if self.memory[i] == Instruction::byte_from_opcode(EndOfProgram).unwrap() {
+            if AsPrimitive::as_(self.memory[i])
+                == NumCast::from(Instruction::byte_from_opcode(EndOfProgram).unwrap()).unwrap()
+            {
                 continue;
             }
             if !has_data && INSTRUCTIONS.contains_key(&(i as u8)) {
@@ -144,7 +198,8 @@ impl Memory {
                 println!("{:#x}:\t{}", i, self.memory[i]);
                 data_words -= 1;
             }
-            if let Some(instruction) = Instruction::look_up(self.memory[i]) {
+            if let Some(instruction) = Instruction::look_up(NumCast::from(self.memory[i]).unwrap())
+            {
                 if instruction.length > 0 {
                     data_words = instruction.length - 1;
                 } else {
@@ -153,7 +208,7 @@ impl Memory {
                 println!(
                     "{:#x}:\t{}\t{:#x}",
                     i,
-                    Instruction::mnemonic_as_string(&self.memory[i]),
+                    Instruction::mnemonic_as_string(&NumCast::from(self.memory[i]).unwrap()),
                     self.memory[i]
                 );
             } else {
@@ -164,41 +219,80 @@ impl Memory {
     }
 }
 
-impl Readable for Memory {
-    fn read(&self, address: u16) -> Result<u8, Box<dyn std::error::Error>> {
-        Ok(self.memory[address as usize])
+impl<A, V, DV> Readable<A, V> for Memory<A, V, DV>
+where
+    A: NumCast + AsPrimitive<A> + ToPrimitive + Debug,
+    V: Copy,
+{
+    fn read(&self, address: A) -> Result<V, Box<dyn Error>> {
+        match address.to_usize() {
+            Some(index) => Ok(self.memory[index]),
+            None => Err(Box::new(MemoryError::ReadError::<A>(address))),
+        }
     }
 }
 
-impl ReadDevice for Memory {}
+impl<A, V, DV> ReadDevice<A, V> for Memory<A, V, DV>
+where
+    A: NumCast + AsPrimitive<A> + Clone + Copy + Debug,
+    V: Copy + Clone,
+{
+}
 
-impl Writeable for Memory {
-    fn write(&mut self, address: u16, data: u8) -> Result<(), Box<dyn Error>> {
-        self.memory[address as usize] = data;
-        // self.memory[(address + RAM_ECHO_OFFSET) as usize] = data;
-        Ok(())
+impl<A, V, DV> Writeable<A, V, DV> for Memory<A, V, DV>
+where
+    A: NumCast + Clone + Copy + Debug + 'static,
+    V: NumCast,
+    DV: NumCast + Shr<i32> + BitAnd<u16>,
+{
+    fn write(&mut self, address: A, data: V) -> Result<(), Box<dyn Error>> {
+        match address.to_usize() {
+            Some(index) => {
+                self.memory[index] = data;
+                Ok(())
+            }
+            None => Err(Box::new(MemoryError::WriteError::<A>(address))),
+        }
     }
 
-    fn write_16(&mut self, address: u16, data: u16) -> Result<(), Box<dyn Error>> {
-        let upper = (data >> 8) as u8;
-        let lower = (data & 0xFF) as u8;
-        self.memory[address as usize] = upper;
-        self.memory[(address + 1) as usize] = lower;
-        Ok(())
+    fn write_16(&mut self, address: A, data: DV) -> Result<(), Box<dyn Error>> {
+        match address.to_usize() {
+            Some(index) => match (self.conversion)(data) {
+                Some((upper, lower)) => {
+                    self.memory[index] = NumCast::from(upper).unwrap();
+                    self.memory[index + 1] = NumCast::from(lower).unwrap();
+                    Ok(())
+                }
+                None => todo!(),
+            },
+            None => todo!(),
+        }
     }
 }
 
-impl WriteDevice for Memory {}
+impl<A, V, DV> WriteDevice<A, V, DV> for Memory<A, V, DV>
+where
+    A: NumCast + Copy + Clone + Debug + 'static,
+    V: NumCast,
+    DV: NumCast + Shr<i32> + BitAnd<u16>,
+{
+}
 
-impl Addressable for Memory {
-    fn in_range(&self, address: u16) -> bool {
-        (0..=u16::MAX).contains(&address)
+impl<A, V, DV> Addressable<A> for Memory<A, V, DV>
+where
+    A: NumCast,
+{
+    fn in_range(&self, address: A) -> bool {
+        match address.to_u16() {
+            Some(addr) => (0..=u16::MAX).contains(&addr),
+            None => false,
+        }
     }
 }
 
 #[test]
 fn test_memory() {
-    let mut mem = Memory::new();
+    let mut mem = Memory::<u16, u8, u16>::new(u16_to_u8);
     let _ = mem.write(RAM, 100);
     assert_eq!(mem.read(RAM).unwrap(), 100);
     assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap(), 100);

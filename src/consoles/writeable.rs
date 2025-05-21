@@ -1,6 +1,6 @@
 use std::error::Error;
 
-pub trait Writeable {
-    fn write(&mut self, address: u16, data: u8) -> Result<(), Box<dyn Error>>;
-    fn write_16(&mut self, address: u16, data: u16) -> Result<(), Box<dyn Error>>;
+pub trait Writeable<A, V, DV> {
+    fn write(&mut self, address: A, data: V) -> Result<(), Box<dyn Error>>;
+    fn write_16(&mut self, address: A, data: DV) -> Result<(), Box<dyn Error>>;
 }

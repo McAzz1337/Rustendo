@@ -1,6 +1,7 @@
 use crate::consoles::bus::Bus;
 use crate::consoles::readable::Readable;
 use crate::consoles::writeable::Writeable;
+use crate::utils::conversion::u16_to_u8;
 
 use super::target::Target;
 extern crate libc;
@@ -40,7 +41,7 @@ macro_rules! panic_or_print {
 #[allow(dead_code)]
 pub struct Cpu {
     registers: Registers,
-    bus: Bus,
+    bus: Bus<u16, u8, u16>,
     pc: u16,
     sp: u16,
     addr: u16,
@@ -53,7 +54,7 @@ pub struct Cpu {
 impl Cpu {
     pub fn new() -> Cpu {
         let mut bus = Bus::new();
-        let memory = Rc::new(RefCell::new(Memory::new()));
+        let memory = Rc::new(RefCell::new(Memory::<u16, u8, u16>::new(u16_to_u8)));
         bus.connect_readable(memory.clone());
         bus.connect_writeable(memory);
         Cpu {

@@ -1,3 +1,3 @@
-pub trait Addressable {
-    fn in_range(&self, address: u16) -> bool;
+pub trait Addressable<A> {
+    fn in_range(&self, address: A) -> bool;
 }

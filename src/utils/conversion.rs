@@ -1,3 +1,25 @@
+use std::ops::{BitAnd, Shr};
+
+use num_traits::{FromPrimitive, NumCast, ToPrimitive};
+
+pub fn cast<N: NumCast + ToPrimitive, U: NumCast>(n: N) -> U {
+    NumCast::from(n).unwrap()
+}
+
+pub fn u16_to_u8<T, U>(n: T) -> Option<(U, U)>
+where
+    T: NumCast + BitAnd<u16> + Shr<i32>,
+    U: NumCast,
+{
+    match n.to_u16() {
+        Some(n) => {
+            let upper = (n >> 8) as u8;
+            let lower = (n & 0xFF) as u8;
+            Some((NumCast::from(upper).unwrap(), NumCast::from(lower).unwrap()))
+        }
+        None => None,
+    }
+}
 
 pub fn u8_as_bit_string(x: u8) -> String {
     let mut bits = String::from("0b");
@@ -16,8 +38,7 @@ pub fn u8_as_bit_string(x: u8) -> String {
 }
 
 pub fn u16_as_bit_string(x: u16) -> String {
-
-     let mut bits = String::from("0b");
+    let mut bits = String::from("0b");
     for i in (0..16).rev() {
         let mask = 0b1 << i;
 
@@ -81,14 +102,12 @@ pub fn u8_as_hex_string(x: u8) -> String {
 }
 
 pub fn u16_as_hex_string(x: u16) -> String {
-
     let mut hex = String::from("0x");
 
     for i in (0..4).rev() {
-
         let shift = i * 4;
         let shifted = (x >> shift) & 0b1111;
-        
+
         match shifted {
             0 => hex = hex + "0",
             1 => hex = hex + "1",
@@ -115,7 +134,6 @@ pub fn u16_as_hex_string(x: u16) -> String {
 
 #[test]
 fn test_u8_as_bit_string() {
-
     assert!(u8_as_bit_string(5) == "0b00000101");
     assert!(u8_as_bit_string(127) == "0b01111111");
     assert!(u8_as_bit_string(128) == "0b10000000");
@@ -124,18 +142,15 @@ fn test_u8_as_bit_string() {
 
 #[test]
 fn test_u16_as_bit_string() {
-
     assert!(u16_as_bit_string(256) == "0b0000000100000000");
     assert!(u16_as_bit_string(512) == "0b0000001000000000");
 }
 
 #[test]
 fn test_u8_as_hex_string() {
-
     assert!(u8_as_hex_string(5) == "0x05");
     assert!(u8_as_hex_string(10) == "0x0A");
     assert!(u8_as_hex_string(15) == "0x0F");
     assert!(u8_as_hex_string(16) == "0x10");
     assert!(u8_as_hex_string(255) == "0xFF");
-
 }
