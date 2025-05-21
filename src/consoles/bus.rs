@@ -77,7 +77,7 @@ where
             .iter()
             .find(|w| w.borrow().in_range(address))
         {
-            writeable.as_ref().borrow_mut().write(address, data);
+            let _ = writeable.as_ref().borrow_mut().write(address, data);
             Ok(())
         } else {
             Err(Box::new(BusError::WriteError::<A>(address)))
@@ -90,7 +90,7 @@ where
             .iter()
             .find(|w| w.borrow().in_range(address))
         {
-            writeable.as_ref().borrow_mut().write_16(address, data);
+            let _ = writeable.as_ref().borrow_mut().write_16(address, data);
             Ok(())
         } else {
             Err(Box::new(BusError::WriteError::<A>(address)))

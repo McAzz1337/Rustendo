@@ -1,16 +1,15 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, LowerHex};
 use std::marker::PhantomData;
-use std::ops::{Add, BitAnd, Shr};
+use std::ops::{BitAnd, Shr};
 
 use num_traits::{AsPrimitive, FromPrimitive, NumCast, ToPrimitive};
 
-use super::instruction::{Instruction, INSTRUCTIONS};
-use super::opcode::OpCode::EndOfProgram;
 use crate::consoles::addressable::Addressable;
 use crate::consoles::bus::{ReadDevice, WriteDevice};
 use crate::consoles::readable::Readable;
 use crate::consoles::writeable::Writeable;
+#[allow(unused_imports)]
 use crate::utils::conversion::u16_to_u8;
 
 pub const INTERRPUT_ENABLE: u16 = 0xFFFF;
@@ -26,6 +25,7 @@ pub const VIDEO_RAM: u16 = 0x8000;
 pub const SWITCHABLE_ROM: u16 = 0x4000;
 pub const ROM: u16 = 0x0000;
 
+#[allow(dead_code)]
 const RAM_ECHO_OFFSET: u16 = ECHO_OF_INTERNAL_RAM - RAM;
 
 pub const TILE_PATTERN_1: u16 = 0x8000;
@@ -83,7 +83,10 @@ where
         + AsPrimitive<V>,
     DV: NumCast + Shr<i32> + BitAnd<u16>,
 {
-    pub fn new(conversion: fn(DV) -> Option<(V, V)>) -> Self {
+    pub fn new(
+        conversion: fn(DV) -> Option<(V, V)>,
+        get_default_value: Option<Box<dyn Fn() -> V>>,
+    ) -> Self {
         let mut memory = Memory::<A, V, DV> {
             address_type: PhantomData,
             d_value_type: PhantomData,
@@ -92,13 +95,15 @@ where
             conversion,
         };
 
-        (0..memory.size).into_iter().for_each(|i| {
-            let _ = <Memory<A, V, DV> as Writeable<A, V, DV>>::write(
-                &mut memory,
-                NumCast::from(i as u16).unwrap(),
-                NumCast::from(Instruction::byte_from_opcode(EndOfProgram).unwrap()).unwrap(),
-            );
-        });
+        if let Some(get_default_value) = get_default_value {
+            (0..memory.size).into_iter().for_each(|i| {
+                let _ = <Memory<A, V, DV> as Writeable<A, V, DV>>::write(
+                    &mut memory,
+                    NumCast::from(i as u16).unwrap(),
+                    NumCast::from(get_default_value()).unwrap(),
+                );
+            });
+        }
 
         (0..NINTENDO_SPLASH_SCREEN.len()).into_iter().for_each(|i| {
             let _ = memory.write(
@@ -112,110 +117,6 @@ where
 
     pub fn get_size(&self) -> usize {
         self.size
-    }
-
-    pub fn print_memory_readable(&self) {
-        let mut data_words = 0;
-
-        for i in 0..self.size {
-            if data_words > 0 {
-                print!("{}\t", self.memory[i]);
-                if data_words == 1 {
-                    println!();
-                }
-                data_words -= 1;
-            } else if let Some(ins) = Instruction::look_up(NumCast::from(self.memory[i]).unwrap()) {
-                data_words = ins.length - 1;
-
-                if data_words > 0 {
-                    print!(
-                        "{}\t",
-                        Instruction::mnemonic_as_string(&NumCast::from(self.memory[i]).unwrap())
-                    );
-                } else {
-                    println!(
-                        "{}",
-                        Instruction::mnemonic_as_string(&NumCast::from(self.memory[i]).unwrap())
-                    );
-                }
-            }
-        }
-    }
-
-    pub fn dump_memory(&self, buffer: &mut Vec<String>) {
-        let mut data_words = 0;
-        let mut line = "".to_string();
-        for i in 0..self.size {
-            if data_words > 0 {
-                line += self.memory[i].to_string().as_str();
-                if data_words == 1 {
-                    buffer.push(line.clone());
-                }
-                data_words -= 1;
-            } else if let Some(ins) = Instruction::look_up(NumCast::from(self.memory[i]).unwrap()) {
-                data_words = ins.length;
-
-                if data_words > 0 {
-                    data_words -= 1;
-                    line = Instruction::mnemonic_as_string(&NumCast::from(self.memory[i]).unwrap())
-                        + "\t";
-                } else {
-                    buffer.push(Instruction::mnemonic_as_string(
-                        &NumCast::from(self.memory[i]).unwrap(),
-                    ));
-                }
-            }
-        }
-    }
-
-    pub fn print(&self) {
-        println!("MEMORY:");
-        let mut has_data = false;
-        for i in 0..self.size {
-            if AsPrimitive::as_(self.memory[i])
-                == NumCast::from(Instruction::byte_from_opcode(EndOfProgram).unwrap()).unwrap()
-            {
-                continue;
-            }
-            if !has_data && INSTRUCTIONS.contains_key(&(i as u8)) {
-                println!("[{:#x}] :\t{:#x}", i, self.memory[i]);
-                if INSTRUCTIONS.get(&(i as u8)).unwrap().length > 1 {
-                    has_data = true;
-                }
-            } else {
-                println!("[{:#x}] :\t{}", i, self.memory[i]);
-                has_data = false;
-            }
-        }
-        println!("--------------------------------");
-    }
-
-    pub fn print_memory_mnemonics(&self) {
-        println!("MEMORY:");
-        let mut data_words = 0;
-        for i in 0..self.size {
-            if data_words > 0 {
-                println!("{:#x}:\t{}", i, self.memory[i]);
-                data_words -= 1;
-            }
-            if let Some(instruction) = Instruction::look_up(NumCast::from(self.memory[i]).unwrap())
-            {
-                if instruction.length > 0 {
-                    data_words = instruction.length - 1;
-                } else {
-                    data_words = 0;
-                }
-                println!(
-                    "{:#x}:\t{}\t{:#x}",
-                    i,
-                    Instruction::mnemonic_as_string(&NumCast::from(self.memory[i]).unwrap()),
-                    self.memory[i]
-                );
-            } else {
-                println!("{:#x}:\t{}", i, self.memory[i]);
-                data_words -= 1;
-            }
-        }
     }
 }
 
@@ -290,13 +191,25 @@ where
     }
 }
 
-#[test]
-fn test_memory() {
-    let mut mem = Memory::<u16, u8, u16>::new(u16_to_u8);
-    let _ = mem.write(RAM, 100);
-    assert_eq!(mem.read(RAM).unwrap(), 100);
-    assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap(), 100);
-    let _ = mem.write(RAM + 40, 10);
-    assert_eq!(mem.read(RAM + 40).unwrap(), 10);
-    assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM + 40).unwrap(), 10);
+#[cfg(test)]
+mod tests {
+    use crate::consoles::gameboy::instruction::Instruction;
+    use crate::consoles::gameboy::opcode::OpCode::EndOfProgram;
+    use crate::consoles::memory::Memory;
+    use crate::consoles::memory::{ECHO_OF_INTERNAL_RAM, RAM};
+    use crate::consoles::readable::Readable;
+    use crate::consoles::writeable::Writeable;
+    use crate::utils::conversion::u16_to_u8;
+
+    #[test]
+    fn test_memory() {
+        let get_default_value = || Instruction::byte_from_opcode(EndOfProgram).unwrap();
+        let mut mem = Memory::<u16, u8, u16>::new(u16_to_u8, Some(Box::new(get_default_value)));
+        let _ = mem.write(RAM, 100);
+        assert_eq!(mem.read(RAM).unwrap(), 100);
+        assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap(), 100);
+        let _ = mem.write(RAM + 40, 10);
+        assert_eq!(mem.read(RAM + 40).unwrap(), 10);
+        assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM + 40).unwrap(), 10);
+    }
 }

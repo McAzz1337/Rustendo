@@ -1,6 +1,7 @@
 use crate::consoles::bus::Bus;
 use crate::consoles::readable::Readable;
 use crate::consoles::writeable::Writeable;
+#[allow(unused_imports)]
 use crate::utils::conversion::u16_to_u8;
 
 use super::target::Target;
@@ -12,7 +13,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::instruction::{FlagAction, Instruction};
-use super::memory::Memory;
 use super::opcode::OpCode;
 use super::registers::Flag;
 use super::registers::Registers;
@@ -1730,10 +1730,12 @@ mod tests {
             bus::Bus,
             gameboy::{
                 cpu::Cpu,
-                memory::Memory,
+                instruction::Instruction,
+                opcode::OpCode::EndOfProgram,
                 registers::{Flag, ZERO_BIT_POS},
                 target::Target,
             },
+            memory::Memory,
             readable::Readable,
             writeable::Writeable,
         },
@@ -1741,7 +1743,11 @@ mod tests {
     };
 
     fn setup() -> Cpu {
-        let memory = Rc::new(RefCell::new(Memory::<u16, u8, u16>::new(u16_to_u8)));
+        let get_default_value = || Instruction::byte_from_opcode(EndOfProgram).unwrap();
+        let memory = Rc::new(RefCell::new(Memory::<u16, u8, u16>::new(
+            u16_to_u8,
+            Some(Box::new(get_default_value)),
+        )));
         let mut bus = Bus::<u16, u8, u16>::new();
         bus.connect_readable(memory.clone());
         bus.connect_writeable(memory);

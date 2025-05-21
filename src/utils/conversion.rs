@@ -1,6 +1,6 @@
 use std::ops::{BitAnd, Shr};
 
-use num_traits::{FromPrimitive, NumCast, ToPrimitive};
+use num_traits::{NumCast, ToPrimitive};
 
 pub fn cast<N: NumCast + ToPrimitive, U: NumCast>(n: N) -> U {
     NumCast::from(n).unwrap()
