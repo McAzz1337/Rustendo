@@ -5,14 +5,14 @@ pub mod consoles;
 pub mod macros;
 pub mod utils;
 
-use consoles::cartridge::{self};
-use consoles::console::{self, Console};
+use consoles::cartridge::create_catridge;
+use consoles::console::{create_console_for, Console};
 
 fn main() {
     let file = "roms/Pokemon-Silver.gbc";
 
-    match cartridge::create(file) {
-        Ok(cartridge) => match console::create_for(cartridge) {
+    match create_catridge(file) {
+        Ok(cartridge) => match create_console_for(cartridge) {
             Ok(mut console) => {
                 trace!(console.run());
             }

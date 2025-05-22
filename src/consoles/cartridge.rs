@@ -21,7 +21,7 @@ impl Display for CartridgeNotFoundError {
 
 impl Error for CartridgeNotFoundError {}
 
-pub fn create(path: &str) -> Result<impl Cartridge, Box<dyn Error>> {
+pub fn create_catridge(path: &str) -> Result<impl Cartridge, Box<dyn Error>> {
     if let Some(i) = path.rfind(".") {
         let suffix = &path[i + 1..];
 
