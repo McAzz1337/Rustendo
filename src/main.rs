@@ -9,7 +9,7 @@ use consoles::cartridge::{self};
 use consoles::console::{self, Console};
 
 fn main() {
-    let file = String::from("roms/Pokemon-Silver.gbc");
+    let file = "roms/Pokemon-Silver.gbc";
 
     match cartridge::create(file) {
         Ok(cartridge) => match console::create_for(cartridge) {

@@ -21,19 +21,19 @@ impl Display for CartridgeNotFoundError {
 
 impl Error for CartridgeNotFoundError {}
 
-pub fn create(path: String) -> Result<impl Cartridge, Box<dyn Error>> {
+pub fn create(path: &str) -> Result<impl Cartridge, Box<dyn Error>> {
     if let Some(i) = path.rfind(".") {
         let suffix = &path[i + 1..];
 
         match suffix {
-            "gbc" => GbCartridge::new(path.clone()),
+            "gbc" => GbCartridge::new(path),
             _ => Err(Box::new(CartridgeNotFoundError {
                 what: "Suffix unknown: ".to_string() + suffix,
             })),
         }
     } else {
         Err(Box::new(CartridgeNotFoundError {
-            what: "Invalid path: ".to_string() + path.as_str(),
+            what: "Invalid path: ".to_string() + path,
         }))
     }
 }

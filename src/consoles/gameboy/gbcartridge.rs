@@ -16,9 +16,12 @@ pub struct GbCartridge {
 }
 
 impl GbCartridge {
-    pub fn new(path: String) -> Result<GbCartridge, Box<dyn Error>> {
-        match fs::read(path.as_str()) {
-            Ok(v) => Ok(GbCartridge { path, data: v }),
+    pub fn new(path: &str) -> Result<GbCartridge, Box<dyn Error>> {
+        match fs::read(path) {
+            Ok(v) => Ok(GbCartridge {
+                path: path.to_string(),
+                data: v,
+            }),
             Err(e) => Err(Box::new(CartridgeNotFoundError {
                 what: format!("{}{}", "Failed to open file: ", e.to_string()),
             })),
