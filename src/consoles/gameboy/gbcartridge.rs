@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fs;
 
 use crate::consoles::addressable::Addressable;
@@ -15,10 +16,12 @@ pub struct GbCartridge {
 }
 
 impl GbCartridge {
-    pub fn new(path: String) -> GbCartridge {
-        GbCartridge {
-            path: path.clone(),
-            data: vec![],
+    pub fn new(path: String) -> Result<GbCartridge, Box<dyn Error>> {
+        match fs::read(path.as_str()) {
+            Ok(v) => Ok(GbCartridge { path, data: v }),
+            Err(e) => Err(Box::new(CartridgeNotFoundError {
+                what: format!("{}{}", "Failed to open file: ", e.to_string()),
+            })),
         }
     }
 
@@ -28,18 +31,6 @@ impl GbCartridge {
 }
 
 impl Cartridge for GbCartridge {
-    fn load(&mut self, path: String) -> Result<(), CartridgeNotFoundError> {
-        match fs::read(path.as_str()) {
-            Ok(v) => {
-                self.data = v;
-                Ok(())
-            }
-            Err(e) => Err(CartridgeNotFoundError {
-                what: "Failed to open file: ".to_string() + e.to_string().as_str(),
-            }),
-        }
-    }
-
     fn dump(&self) -> String {
         let mut dump = String::new();
         let mut data_words = 0;
@@ -66,6 +57,13 @@ impl Cartridge for GbCartridge {
         }
 
         dump
+    }
+
+    fn dump_raw(&self) -> String {
+        self.data
+            .iter()
+            .map(u8::to_string)
+            .fold(String::new(), |a, b| a + b.as_str())
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

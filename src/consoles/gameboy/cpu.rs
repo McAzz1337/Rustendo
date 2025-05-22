@@ -17,27 +17,6 @@ use super::opcode::OpCode;
 use super::registers::Flag;
 use super::registers::Registers;
 
-macro_rules! log {
-    ($a: expr) => {
-        println!("{}", stringify!($a));
-        $a;
-    };
-}
-
-macro_rules! panic_or_print {
-    ($a: expr) => {
-        panic!($a);
-    };
-
-    ($a: expr, $b: expr) => {
-        panic!($a, $b);
-    };
-
-    ($a: expr, $b: expr, $c: expr) => {
-        panic!($a, $b, $c);
-    };
-}
-
 #[allow(dead_code)]
 pub struct Cpu {
     registers: Registers,
@@ -523,7 +502,7 @@ impl Cpu {
                 .unwrap(),
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::ADC(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::ADC(reg)));
             }
         };
 
@@ -563,7 +542,7 @@ impl Cpu {
                 .unwrap(),
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::ADD(src)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::ADD(src)));
             }
         };
 
@@ -594,7 +573,7 @@ impl Cpu {
             Target::SP => self.sp,
             Target::R8 => self.bus.borrow().read(self.pc + 1).unwrap() as u16,
             _ => {
-                panic_or_print!(
+                unimplemented!(
                     "Unimplemented {}",
                     format!("{:#?}", OpCode::ADD16(dst, src))
                 );
@@ -616,7 +595,7 @@ impl Cpu {
                 (old, new)
             }
             _ => {
-                panic_or_print!(
+                unimplemented!(
                     "Unimplemented {}",
                     format!("{:#?}", OpCode::ADD16(dst, src))
                 );
@@ -650,7 +629,7 @@ impl Cpu {
             }
             Target::D8 => self.registers.a &= self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::AND(src)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::AND(src)));
             }
         }
         // self.registers.set_flag(Flag::Zero, self.registers.a == 0);
@@ -679,7 +658,7 @@ impl Cpu {
                 .read(self.registers.combined_register(Target::HL))
                 .unwrap(),
             _ => {
-                panic_or_print!(
+                unimplemented!(
                     "Unimplemented {}",
                     format!("{:#?}", OpCode::BIT(bit_pos, reg))
                 );
@@ -733,7 +712,7 @@ impl Cpu {
             Target::HL => ((self.registers.h as u16) << 8) | self.registers.l as u16,
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap() as u16,
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::CP(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::CP(reg)));
             }
         };
 
@@ -815,7 +794,7 @@ impl Cpu {
                 );
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::DEC(target)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::DEC(target)));
             }
         };
 
@@ -880,7 +859,7 @@ impl Cpu {
                 );
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::INC(target)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::INC(target)));
             }
         }
     }
@@ -975,7 +954,7 @@ impl Cpu {
                 .unwrap(),
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
             }
         };
 
@@ -1003,7 +982,7 @@ impl Cpu {
                 let _ = bus.write(addr, v);
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
             }
         };
     }
@@ -1047,7 +1026,7 @@ impl Cpu {
                 .read(self.sp + self.bus.borrow().read(self.pc + 1).unwrap() as u16)
                 .unwrap() as u16,
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
             }
         };
 
@@ -1080,7 +1059,7 @@ impl Cpu {
                 let _ = bus.write_16(addr, v);
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
             }
         }
     }
@@ -1102,7 +1081,7 @@ impl Cpu {
             }
             Target::D8 => self.registers.a |= self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::OR(src)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::OR(src)));
             }
         }
 
@@ -1124,7 +1103,7 @@ impl Cpu {
                 self.registers.set_combined_register(target, v)
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::POP(target)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::POP(target)));
             }
         }
     }
@@ -1135,7 +1114,7 @@ impl Cpu {
                 self.registers.combined_register(target)
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::PUSH(target)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::PUSH(target)));
             }
         };
 
@@ -1162,7 +1141,7 @@ impl Cpu {
                 Target::H => self.registers.h &= mask,
                 Target::L => self.registers.l &= mask,
                 _ => {
-                    panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RES(bit, reg)));
+                    unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RES(bit, reg)));
                 }
             }
         }
@@ -1291,7 +1270,7 @@ impl Cpu {
                 return;
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RL(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RL(reg)));
             }
         };
 
@@ -1321,7 +1300,7 @@ impl Cpu {
                 self.registers.set_combined_register(reg, v.rotate_left(1));
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RLC(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RLC(reg)));
             }
         };
     }
@@ -1382,7 +1361,7 @@ impl Cpu {
                 (old, self.registers.l)
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RR(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RR(reg)));
             }
         };
 
@@ -1413,7 +1392,7 @@ impl Cpu {
             Target::H => self.registers.h = f(self.registers.h, self),
             Target::L => self.registers.l = f(self.registers.l, self),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::RRC(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RRC(reg)));
             }
         };
     }
@@ -1449,7 +1428,7 @@ impl Cpu {
                 .unwrap(),
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SBC(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SBC(reg)));
             }
         };
 
@@ -1486,7 +1465,7 @@ impl Cpu {
             Target::L => self.registers.l |= mask,
             // Target::HL => v = &mut self.registers.h,
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SET(bit, reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SET(bit, reg)));
             }
         }
     }
@@ -1502,7 +1481,7 @@ impl Cpu {
             Target::H => self.registers.h <<= 1,
             Target::L => self.registers.l <<= 1,
             _ => {
-                panic_or_print!("Unimplemented SL, NOT SURE IF THIS INSTRUCTION EXISTS");
+                unimplemented!("Unimplemented SL, NOT SURE IF THIS INSTRUCTION EXISTS");
             }
         }
     }
@@ -1529,7 +1508,7 @@ impl Cpu {
             Target::H => self.registers.h = f(self.registers.h, self),
             Target::L => self.registers.l = f(self.registers.l, self),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SLA(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SLA(reg)));
             }
         };
     }
@@ -1566,7 +1545,7 @@ impl Cpu {
                 return;
             }
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SRL(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SRL(reg)));
             }
         };
     }
@@ -1593,7 +1572,7 @@ impl Cpu {
             Target::H => f(self.registers.h, self),
             Target::L => f(self.registers.l, self),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SRA(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SRA(reg)));
             }
         }
     }
@@ -1611,7 +1590,7 @@ impl Cpu {
             Target::HL => self.registers.combined_register(Target::HL) as u8,
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SUB(src)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SUB(src)));
             }
         };
 
@@ -1647,7 +1626,7 @@ impl Cpu {
             Target::L => self.registers.l = f(self.registers.l, self),
             Target::H => self.registers.h = f(self.registers.h, self),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::SWAP(reg)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SWAP(reg)));
             }
         }
     }
@@ -1672,7 +1651,7 @@ impl Cpu {
             }
             Target::D8 => self.registers.a ^= self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                panic_or_print!("Unimplemented {}", format!("{:#?}", OpCode::XOR(src)));
+                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::XOR(src)));
             }
         }
 

@@ -21,6 +21,7 @@ impl GameBoy {
             u16_to_u8,
             Some(Box::new(get_default_value)),
         )));
+
         let mut bus = Bus::<u16, u8, u16>::new();
         bus.connect_readable(memory.clone());
         bus.connect_writeable(memory);
@@ -38,7 +39,6 @@ impl Console for GameBoy {
     fn load_save(&self, path: String) {}
 
     fn run(&mut self) {
-        println!("dumped");
-        //self.cpu.run();
+        self.cpu.run();
     }
 }

@@ -2,6 +2,7 @@
 extern crate lazy_static;
 
 pub mod consoles;
+pub mod macros;
 pub mod utils;
 
 use consoles::cartridge::{self};
@@ -35,7 +36,7 @@ fn main() {
     match cartridge::create(file) {
         Ok(cartridge) => match console::create_for(cartridge) {
             Ok(mut console) => {
-                console.run();
+                trace!(console.run());
             }
             Err(e) => {
                 println!("{}", e);

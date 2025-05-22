@@ -3,8 +3,8 @@ use std::error::Error;
 use std::{any::Any, fmt::Display};
 
 pub trait Cartridge {
-    fn load(&mut self, path: String) -> Result<(), CartridgeNotFoundError>;
     fn dump(&self) -> String;
+    fn dump_raw(&self) -> String;
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -26,7 +26,7 @@ pub fn create(path: String) -> Result<impl Cartridge, Box<dyn Error>> {
         let suffix = &path[i + 1..];
 
         match suffix {
-            "gbc" => Ok(GbCartridge::new(path)),
+            "gbc" => GbCartridge::new(path.clone()),
             _ => Err(Box::new(CartridgeNotFoundError {
                 what: "Suffix unknown: ".to_string() + suffix,
             })),

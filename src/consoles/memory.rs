@@ -118,6 +118,14 @@ where
     pub fn get_size(&self) -> usize {
         self.size
     }
+
+    pub fn as_hex_dump(&self) -> Vec<String> {
+        self.memory
+            .iter()
+            .flat_map(|x| x.to_u8())
+            .map(|x| format!("{:#x}", x))
+            .collect()
+    }
 }
 
 impl<A, V, DV> Readable<A, V> for Memory<A, V, DV>
