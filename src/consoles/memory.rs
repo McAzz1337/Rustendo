@@ -201,9 +201,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::consoles::gameboy::game_boy::GbMemory;
     use crate::consoles::gameboy::GbInstruction;
     use crate::consoles::gameboy::GbOpCode::EndOfProgram;
-    use crate::consoles::memory::Memory;
     use crate::consoles::memory::{ECHO_OF_INTERNAL_RAM, RAM};
     use crate::consoles::readable::Readable;
     use crate::consoles::writeable::Writeable;
@@ -212,8 +212,7 @@ mod tests {
     #[test]
     fn test_memory() {
         let get_default_value = || GbInstruction::byte_from_opcode(EndOfProgram).unwrap();
-        let mut mem =
-            Memory::<u16, u8, u16, 0x10000>::new(u16_to_u8, Some(Box::new(get_default_value)));
+        let mut mem = GbMemory::new(u16_to_u8, Some(Box::new(get_default_value)));
         let _ = mem.write(RAM, 100);
         assert_eq!(mem.read(RAM).unwrap(), 100);
         assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap(), 100);

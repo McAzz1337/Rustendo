@@ -4,6 +4,7 @@ use crate::consoles::writeable::Writeable;
 #[allow(unused_imports)]
 use crate::utils::conversion::u16_to_u8;
 
+use super::game_boy::GbBus;
 use super::target::Target;
 extern crate libc;
 
@@ -20,7 +21,7 @@ use super::registers::Registers;
 #[allow(dead_code)]
 pub struct Cpu {
     registers: Registers,
-    bus: Rc<RefCell<Bus<u16, u8, u16>>>,
+    bus: Rc<RefCell<GbBus>>,
     pc: u16,
     sp: u16,
     addr: u16,
