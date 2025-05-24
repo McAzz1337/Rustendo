@@ -1723,7 +1723,7 @@ mod tests {
 
     fn setup() -> Cpu {
         let get_default_value = || Instruction::byte_from_opcode(EndOfProgram).unwrap();
-        let memory = Rc::new(RefCell::new(Memory::<u16, u8, u16>::new(
+        let memory = Rc::new(RefCell::new(Memory::<u16, u8, u16, 0x10000>::new(
             u16_to_u8,
             Some(Box::new(get_default_value)),
         )));

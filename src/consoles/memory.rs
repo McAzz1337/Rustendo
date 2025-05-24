@@ -61,15 +61,15 @@ where
 
 impl<A> Error for MemoryError<A> where A: Debug {}
 
-pub struct Memory<A, V, DV> {
+pub struct Memory<A, V, DV, const N: usize> {
     address_type: PhantomData<A>,
     d_value_type: PhantomData<DV>,
     size: usize,
-    memory: [V; 0x10000],
+    memory: [V; N],
     conversion: fn(DV) -> Option<(V, V)>,
 }
 
-impl<A, V, DV> Memory<A, V, DV>
+impl<A, V, DV, const N: usize> Memory<A, V, DV, N>
 where
     A: NumCast + Copy + Clone + Debug + 'static,
     V: LowerHex
@@ -87,17 +87,17 @@ where
         conversion: fn(DV) -> Option<(V, V)>,
         get_default_value: Option<Box<dyn Fn() -> V>>,
     ) -> Self {
-        let mut memory = Memory::<A, V, DV> {
+        let mut memory = Memory::<A, V, DV, N> {
             address_type: PhantomData,
             d_value_type: PhantomData,
             size: 0x10000,
-            memory: [V::default(); 0x10000],
+            memory: [V::default(); N],
             conversion,
         };
 
         if let Some(get_default_value) = get_default_value {
             (0..memory.size).into_iter().for_each(|i| {
-                let _ = <Memory<A, V, DV> as Writeable<A, V, DV>>::write(
+                let _ = <Memory<A, V, DV, N> as Writeable<A, V, DV>>::write(
                     &mut memory,
                     NumCast::from(i as u16).unwrap(),
                     NumCast::from(get_default_value()).unwrap(),
@@ -128,7 +128,7 @@ where
     }
 }
 
-impl<A, V, DV> Readable<A, V> for Memory<A, V, DV>
+impl<A, V, DV, const N: usize> Readable<A, V> for Memory<A, V, DV, N>
 where
     A: NumCast + AsPrimitive<A> + ToPrimitive + Debug,
     V: Copy,
@@ -141,14 +141,14 @@ where
     }
 }
 
-impl<A, V, DV> ReadDevice<A, V> for Memory<A, V, DV>
+impl<A, V, DV, const N: usize> ReadDevice<A, V> for Memory<A, V, DV, N>
 where
     A: NumCast + AsPrimitive<A> + Clone + Copy + Debug,
     V: Copy + Clone,
 {
 }
 
-impl<A, V, DV> Writeable<A, V, DV> for Memory<A, V, DV>
+impl<A, V, DV, const N: usize> Writeable<A, V, DV> for Memory<A, V, DV, N>
 where
     A: NumCast + Clone + Copy + Debug + 'static,
     V: NumCast,
@@ -179,7 +179,7 @@ where
     }
 }
 
-impl<A, V, DV> WriteDevice<A, V, DV> for Memory<A, V, DV>
+impl<A, V, DV, const N: usize> WriteDevice<A, V, DV> for Memory<A, V, DV, N>
 where
     A: NumCast + Copy + Clone + Debug + 'static,
     V: NumCast,
@@ -187,7 +187,7 @@ where
 {
 }
 
-impl<A, V, DV> Addressable<A> for Memory<A, V, DV>
+impl<A, V, DV, const N: usize> Addressable<A> for Memory<A, V, DV, N>
 where
     A: NumCast,
 {
@@ -212,7 +212,8 @@ mod tests {
     #[test]
     fn test_memory() {
         let get_default_value = || GbInstruction::byte_from_opcode(EndOfProgram).unwrap();
-        let mut mem = Memory::<u16, u8, u16>::new(u16_to_u8, Some(Box::new(get_default_value)));
+        let mut mem =
+            Memory::<u16, u8, u16, 0x10000>::new(u16_to_u8, Some(Box::new(get_default_value)));
         let _ = mem.write(RAM, 100);
         assert_eq!(mem.read(RAM).unwrap(), 100);
         assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap(), 100);
