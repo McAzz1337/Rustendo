@@ -4,5 +4,7 @@ pub mod cartridge;
 pub mod console;
 mod gameboy;
 mod memory;
+mod memory_map;
 mod readable;
+mod static_data;
 mod writeable;
