@@ -1,4 +1,5 @@
 /target
 /roms
+/saves
 *.txt
 *.bin
