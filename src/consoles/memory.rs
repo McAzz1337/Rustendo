@@ -12,22 +12,6 @@ use crate::consoles::writeable::Writeable;
 #[allow(unused_imports)]
 use crate::utils::conversion::u16_to_u8;
 
-pub const INTERRPUT_ENABLE: u16 = 0xFFFF;
-pub const INTERNAL_RAM: u16 = 0xFF80;
-pub const EMPTY_BUT_UNUSABLE_FOR_IO: u16 = 0xFF4C;
-pub const IO_PORTS: u16 = 0xFF00;
-pub const EMPTY_BUT_UNUSABLE_FOR_IO_2: u16 = 0xFEA0;
-pub const SPRITE_ATTRIB: u16 = 0xFE00;
-pub const ECHO_OF_INTERNAL_RAM: u16 = 0xE000;
-pub const RAM: u16 = 0xC000;
-pub const SWITCHABLE_RAM: u16 = 0xA000;
-pub const VIDEO_RAM: u16 = 0x8000;
-pub const SWITCHABLE_ROM: u16 = 0x4000;
-pub const ROM: u16 = 0x0000;
-
-#[allow(dead_code)]
-const RAM_ECHO_OFFSET: u16 = ECHO_OF_INTERNAL_RAM - RAM;
-
 pub const TILE_PATTERN_1: u16 = 0x8000;
 pub const TILE_PATTERN_2: u16 = 0x9000;
 
@@ -64,11 +48,11 @@ impl<A> Error for MemoryError<A> where A: Debug {}
 pub struct Memory<A, V, DV, const N: usize> {
     address_type: PhantomData<A>,
     d_value_type: PhantomData<DV>,
-    size: usize,
     memory: [V; N],
     conversion: fn(DV) -> Option<(V, V)>,
 }
 
+#[allow(dead_code)]
 impl<A, V, DV, const N: usize> Memory<A, V, DV, N>
 where
     A: NumCast + Copy + Clone + Debug + 'static,
@@ -90,13 +74,12 @@ where
         let mut memory = Memory::<A, V, DV, N> {
             address_type: PhantomData,
             d_value_type: PhantomData,
-            size: 0x10000,
             memory: [V::default(); N],
             conversion,
         };
 
         if let Some(get_default_value) = get_default_value {
-            (0..memory.size).into_iter().for_each(|i| {
+            (0..N).into_iter().for_each(|i| {
                 let _ = <Memory<A, V, DV, N> as Writeable<A, V, DV>>::write(
                     &mut memory,
                     NumCast::from(i as u16).unwrap(),
@@ -105,18 +88,7 @@ where
             });
         }
 
-        (0..NINTENDO_SPLASH_SCREEN.len()).into_iter().for_each(|i| {
-            let _ = memory.write(
-                NumCast::from(i as u16 + 104).unwrap(),
-                NumCast::from(NINTENDO_SPLASH_SCREEN[i]).unwrap(),
-            );
-        });
-
         memory
-    }
-
-    pub fn get_size(&self) -> usize {
-        self.size
     }
 
     pub fn as_hex_dump(&self) -> Vec<String> {
@@ -196,28 +168,5 @@ where
             Some(addr) => (0..=u16::MAX).contains(&addr),
             None => false,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::consoles::gameboy::game_boy::GbMemory;
-    use crate::consoles::gameboy::GbInstruction;
-    use crate::consoles::gameboy::GbOpCode::EndOfProgram;
-    use crate::consoles::memory::{ECHO_OF_INTERNAL_RAM, RAM};
-    use crate::consoles::readable::Readable;
-    use crate::consoles::writeable::Writeable;
-    use crate::utils::conversion::u16_to_u8;
-
-    #[test]
-    fn test_memory() {
-        let get_default_value = || GbInstruction::byte_from_opcode(EndOfProgram).unwrap();
-        let mut mem = GbMemory::new(u16_to_u8, Some(Box::new(get_default_value)));
-        let _ = mem.write(RAM, 100);
-        assert_eq!(mem.read(RAM).unwrap(), 100);
-        assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM).unwrap(), 100);
-        let _ = mem.write(RAM + 40, 10);
-        assert_eq!(mem.read(RAM + 40).unwrap(), 10);
-        assert_eq!(mem.read(ECHO_OF_INTERNAL_RAM + 40).unwrap(), 10);
     }
 }
