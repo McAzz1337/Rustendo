@@ -65,4 +65,3 @@ pub enum OpCode {
     STORE(Target, Target), // These instructions do not exist for the game boy and are only used as convenience instructions
     STORE16(Target, Target), // First arg dst address 16 bit, seconds arg src direct value 8 / 16 bit
 }
-
