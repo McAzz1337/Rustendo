@@ -23,3 +23,23 @@ macro_rules! log {
         )
     }};
 }
+
+#[macro_export]
+macro_rules! shift_left {
+    ($value: expr, $bits: expr) => {
+        $value << $bits
+    };
+    ($value: expr, $bits: expr, $ty: ty) => {
+        ($value as $ty) << $bits
+    };
+}
+
+#[macro_export]
+macro_rules! shift_right {
+    ($value: expr, $bits: expr) => {
+        $value >> $bits
+    };
+    ($value: expr, $bits: expr, $ty: ty) => {
+        ($value >> $bits) as $ty
+    };
+}
