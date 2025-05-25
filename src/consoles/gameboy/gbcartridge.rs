@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fs;
+use std::ops::RangeInclusive;
 
 use crate::consoles::addressable::Addressable;
 use crate::consoles::bus::ReadDevice;
@@ -13,6 +14,7 @@ use super::instruction::Instruction;
 pub struct GbCartridge {
     path: String,
     data: Vec<u8>,
+    address_range: RangeInclusive<usize>,
 }
 
 impl GbCartridge {
@@ -21,6 +23,7 @@ impl GbCartridge {
             Ok(v) => Ok(GbCartridge {
                 path: path.to_string(),
                 data: v,
+                address_range: (0..=0),
             }),
             Err(e) => Err(Box::new(CartridgeNotFoundError {
                 what: format!("{}{}", "Failed to open file: ", e.to_string()),
@@ -83,7 +86,11 @@ impl Readable<u16, u8> for GbCartridge {
 }
 
 impl Addressable<u16> for GbCartridge {
+    fn assign_address_range(&mut self, range: std::ops::RangeInclusive<usize>) {
+        self.address_range = range;
+    }
+
     fn in_range(&self, address: u16) -> bool {
-        todo!()
+        self.address_range.contains(&(address as usize))
     }
 }
