@@ -2,7 +2,7 @@ use crate::consoles::bus::Bus;
 use crate::consoles::memory_map::gameboy::WRAM;
 use crate::consoles::readable::Readable;
 use crate::consoles::writeable::Writeable;
-use crate::{log, trace};
+use crate::{and, log, shift_left, shift_right, trace};
 use ::function_name::named;
 
 #[allow(unused_imports)]
@@ -691,7 +691,7 @@ impl Cpu {
             let mut bus = self.bus.borrow_mut();
             let address = match bus.read(self.pc + 3) {
                 Ok(lower) => match bus.read(self.pc + 4) {
-                    Ok(higher) => ((higher as u16) << 8) | lower as u16,
+                    Ok(higher) => shift_left!(higher, 8, u16) | lower as u16,
                     Err(e) => {
                         println!("{e}");
                         panic!()
@@ -708,7 +708,7 @@ impl Cpu {
 
             self.pc = match bus.read(self.pc + 1) {
                 Ok(lower) => match bus.read(self.pc + 2) {
-                    Ok(upper) => (upper as u16) << 8 | lower as u16,
+                    Ok(upper) => shift_left!(upper, 8, u16) | lower as u16,
                     Err(e) => {
                         println!("{e}");
                         panic!()
@@ -736,7 +736,7 @@ impl Cpu {
             Target::E => self.registers.e as u16,
             Target::H => self.registers.h as u16,
             Target::L => self.registers.l as u16,
-            Target::HL => ((self.registers.h as u16) << 8) | self.registers.l as u16,
+            Target::HL => shift_left!(self.registers.h, 8, u16) | self.registers.l as u16,
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap() as u16,
             _ => {
                 unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::CP(reg)));
@@ -772,7 +772,7 @@ impl Cpu {
         let mut correction: u8 = 0;
         let carry_flag = self.registers.get_flag(Flag::HalfCarry);
 
-        if carry_flag || (self.registers.a & 0x0F) > 9 {
+        if carry_flag || and!(self.registers.a, 0x0F) > 9 {
             correction |= 0x06;
         }
 
@@ -920,7 +920,7 @@ impl Cpu {
 
     fn jump_by_flag(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = ((self.bus.borrow().read(self.pc + 2).unwrap() as u16) << 8)
+            self.pc = shift_left!(self.bus.borrow().read(self.pc + 2).unwrap(), 8, u16)
                 | self.bus.borrow().read(self.pc + 1).unwrap() as u16;
             true
         } else {
@@ -970,7 +970,7 @@ impl Cpu {
                 .bus
                 .borrow()
                 .read(
-                    (self.bus.borrow().read(self.pc + 1).unwrap() as u16) << 8
+                    shift_left!(self.bus.borrow().read(self.pc + 1).unwrap(), 8, u16)
                         | self.bus.borrow().read(self.pc + 2).unwrap() as u16,
                 )
                 .unwrap(),
@@ -1004,7 +1004,7 @@ impl Cpu {
             }
             Target::A16 => {
                 let mut bus = self.bus.borrow_mut();
-                let addr = (bus.read(self.pc + 1).unwrap() as u16) << 8
+                let addr = shift_left!(bus.read(self.pc + 1).unwrap(), 8, u16)
                     | bus.read(self.pc + 2).unwrap() as u16;
                 let _ = bus.write(addr, v);
             }
@@ -1037,13 +1037,13 @@ impl Cpu {
                 .bus
                 .borrow()
                 .read(
-                    ((self.bus.borrow().read(self.pc + 1).unwrap() as u16) << 8)
+                    shift_left!(self.bus.borrow().read(self.pc + 1).unwrap(), 8, u16)
                         + self.bus.borrow().read(self.pc + 2).unwrap() as u16,
                 )
                 .unwrap() as u16,
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap() as u16,
             Target::D16 => {
-                ((self.bus.borrow().read(self.pc + 1).unwrap() as u16) << 8)
+                shift_left!(self.bus.borrow().read(self.pc + 1).unwrap(), 8, u16)
                     + (self.bus.borrow().read(self.pc + 2).unwrap() as u16)
             }
             Target::SP => self.sp,
@@ -1074,7 +1074,7 @@ impl Cpu {
             }
             Target::A16 => {
                 let _ = self.bus.borrow_mut().write_16(
-                    ((self.bus.borrow().read(self.pc + 1).unwrap() as u16) << 8)
+                    shift_left!(self.bus.borrow().read(self.pc + 1).unwrap(), 8, u16)
                         + self.bus.borrow().read(self.pc + 2).unwrap() as u16,
                     v,
                 );
@@ -1120,7 +1120,7 @@ impl Cpu {
     }
 
     fn pop(&mut self, target: Target) {
-        let v = ((self.bus.borrow().read(self.sp + 1).unwrap() as u16) << 8)
+        let v = shift_left!(self.bus.borrow().read(self.sp + 1).unwrap(), 8, u16)
             | self.bus.borrow().read(self.sp + 2).unwrap() as u16;
 
         self.sp = self.sp.wrapping_add(2);
@@ -1147,18 +1147,19 @@ impl Cpu {
 
         let mut bus = self.bus.borrow_mut();
         let _ = bus.write(self.sp, (v & 0b11111111) as u8);
-        let _ = bus.write(self.sp - 1, ((v & 0b1111111100000000) >> 8) as u8);
+        let _ = bus.write(self.sp - 1, shift_right!(v & 0b1111111100000000, 8, u8));
 
         self.sp -= 2;
     }
 
     fn res(&mut self, bit: u8, reg: Target) {
         if reg == Target::HL {
-            let mask = !(1 << bit);
+            let mask = !shift_left!(1, bit, u16);
             let v = self.registers.combined_register(Target::HL);
-            self.registers.set_combined_register(Target::HL, v & mask);
+            self.registers
+                .set_combined_register(Target::HL, and!(v, mask));
         } else {
-            let mask = !(1 << bit);
+            let mask = !shift_left!(1, bit);
             match reg {
                 Target::A => self.registers.a &= mask,
                 Target::B => self.registers.b &= mask,
@@ -1176,7 +1177,7 @@ impl Cpu {
 
     fn ret(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = ((self.bus.borrow().read(self.sp - 1).unwrap() as u16) << 8)
+            self.pc = shift_left!(self.bus.borrow().read(self.sp - 1).unwrap(), 8, u16)
                 | (self.bus.borrow().read(self.sp - 2).unwrap() as u16);
 
             true
@@ -1188,15 +1189,17 @@ impl Cpu {
     fn rla(&mut self) {
         let msb = (self.registers.a & (1 << ZERO_BIT_POS)) >> ZERO_BIT_POS;
         let carry = self.registers.filter_flag(Flag::Carry);
-        self.registers.a = self.registers.a << 1 | carry;
+        self.registers.a = shift_left!(self.registers.a, 1) | carry;
         self.registers.set_flag(Flag::Carry, msb != 0);
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
         // Do not call self.set_flags()
     }
 
     fn rlca(&mut self) {
-        self.registers
-            .set_flag(Flag::Carry, (self.registers.a & (1 << ZERO_BIT_POS)) != 0);
+        self.registers.set_flag(
+            Flag::Carry,
+            and!(self.registers.a, shift_left!(1, ZERO_BIT_POS)) != 0,
+        );
         self.registers.a = self.registers.a.rotate_left(1);
 
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
@@ -1204,9 +1207,9 @@ impl Cpu {
     }
 
     fn rra(&mut self) {
-        let lsb = self.registers.a & 1;
+        let lsb = and!(self.registers.a, 1);
         let carry = self.registers.filter_flag(Flag::Carry) << ZERO_BIT_POS;
-        self.registers.a = self.registers.a >> 1 | carry;
+        self.registers.a = shift_right!(self.registers.a, 1) | carry;
         self.registers.set_flag(Flag::Carry, lsb != 0);
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
         // Do not call self.set_flags()
@@ -1223,7 +1226,7 @@ impl Cpu {
 
     fn rl(&mut self, reg: Target) {
         let f = |old: u8, cpu: &mut Cpu| {
-            let new_carry = old >> 7;
+            let new_carry = shift_right!(old, 7);
             let old_carry = if cpu.registers.get_flag(Flag::Carry) {
                 1
             } else {
@@ -1282,12 +1285,12 @@ impl Cpu {
                 } else {
                     0
                 };
-                let msb_upper = (upper >> 7) as u8;
-                let msb_lower = (lower >> 7) as u8;
-                let new_upper = (upper << 1) as u8 | old_carry;
+                let msb_upper = shift_right!(upper, 7, u8);
+                let msb_lower = shift_right!(lower, 7, u8);
+                let new_upper = shift_left!(upper, 1, u8) | old_carry;
                 let new_carry = msb_lower as u8;
-                let new_lower = (lower << 1) as u8 | msb_upper;
-                let new_value = ((new_upper as u16) << 7) + new_lower as u16;
+                let new_lower = shift_left!(lower, 1, u8) | msb_upper;
+                let new_value = shift_left!(new_upper, 7, u16) + new_lower as u16;
                 self.registers.set_combined_register(Target::HL, new_value);
                 self.registers.set_flag(Flag::Zero, new_value == 0);
                 self.registers.set_flag(Flag::Sub, false);
@@ -1306,7 +1309,7 @@ impl Cpu {
     fn rlc(&mut self, reg: Target) {
         let f = |old: u8, cpu: &mut Cpu| {
             cpu.registers
-                .set_flag(Flag::Carry, (old & (1 << ZERO_BIT_POS)) != 0);
+                .set_flag(Flag::Carry, (old & shift_left!(1, ZERO_BIT_POS)) != 0);
             let new = old.rotate_left(1);
             cpu.registers.set_flag(Flag::Zero, new == 0);
             new
@@ -1322,7 +1325,8 @@ impl Cpu {
             Target::L => self.registers.l = f(self.registers.l, self),
             Target::HL => {
                 let v = self.registers.combined_register(reg);
-                self.registers.set_flag(Flag::Carry, (v & (1 << 15)) != 0);
+                self.registers
+                    .set_flag(Flag::Carry, (v & shift_left!(1, 15)) != 0);
                 self.registers.set_combined_register(reg, v.rotate_left(1));
             }
             _ => {
@@ -1341,7 +1345,7 @@ impl Cpu {
                 println!("carry 0");
                 0
             };
-            let new = (old >> 1) | (old_carry << 7);
+            let new = shift_right!(old, 1) | shift_left!(old_carry, 7);
             cpu.registers.set_flag_from_u8(Flag::Carry, new_carry);
             new
         };
@@ -1404,7 +1408,7 @@ impl Cpu {
             };
             let new_carry = old & 1;
             cpu.registers.set_flag(Flag::Carry, new_carry == 1);
-            let new = (old >> 1) | (old_carry << 7);
+            let new = shift_right!(old, 1) | shift_left!(old_carry, 7);
             cpu.registers.set_flag(Flag::Zero, new == 0);
             new
         };
@@ -1424,14 +1428,14 @@ impl Cpu {
     }
 
     fn rst(&mut self, address: u16) {
+        let _ = self.bus.borrow_mut().write(
+            self.sp - 1,
+            shift_right!(and!(self.pc, 0b1111111100000000), 8, u8),
+        );
         let _ = self
             .bus
             .borrow_mut()
-            .write(self.sp - 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
-        let _ = self
-            .bus
-            .borrow_mut()
-            .write(self.sp, (self.pc & 0b11111111) as u8);
+            .write(self.sp, and!(self.pc, 0b11111111, u8));
 
         self.sp = self.sp.wrapping_sub(2);
 
@@ -1515,8 +1519,8 @@ impl Cpu {
     #[allow(unused_assignments)]
     fn sla(&mut self, reg: Target) {
         let f = |old: u8, cpu: &mut Cpu| {
-            let bit = old & (1 << ZERO_BIT_POS);
-            let new = old << 1;
+            let bit = old & shift_left!(1, ZERO_BIT_POS);
+            let new = shift_left!(old, 1);
             cpu.registers.set_flag(Flag::Carry, bit == 0);
             cpu.registers.set_flag(Flag::Zero, new == 0);
             cpu.registers.set_flag(Flag::HalfCarry, false);
@@ -1541,8 +1545,8 @@ impl Cpu {
 
     fn srl(&mut self, reg: Target) {
         let f = |old: u8, cpu: &mut Cpu| {
-            let lsb = old & 1;
-            let new = old >> 1;
+            let lsb = and!(old, 1);
+            let new = shift_right!(old, 1);
             cpu.registers.set_flag(Flag::Zero, new == 0);
             cpu.registers.set_flag(Flag::Sub, false);
             cpu.registers.set_flag(Flag::Carry, lsb != 0);
@@ -1578,10 +1582,10 @@ impl Cpu {
 
     #[allow(unused_assignments)]
     fn sra(&mut self, reg: Target) {
-        let msb = |v: u8| v & (1 << ZERO_BIT_POS);
+        let msb = |v: u8| v & shift_left!(1, ZERO_BIT_POS);
         let f = |old: u8, cpu: &mut Cpu| {
-            let lsb = old & 1;
-            let new = (old >> 1) | (msb(old));
+            let lsb = and!(old, 1);
+            let new = shift_right!(old, 1) | (msb(old));
             cpu.registers.set_flag(Flag::Zero, new == 0);
             cpu.registers.set_flag(Flag::Sub, false);
             cpu.registers.set_flag(Flag::Carry, lsb != 0);
@@ -1635,10 +1639,10 @@ impl Cpu {
 
     fn swap(&mut self, reg: Target) {
         let f = |v: u8, cpu: &mut Cpu| {
-            let upper = v & (0b1111 << 4);
-            let lower = v & 0b1111;
+            let upper = and!(v, shift_left!(0b1111, 4));
+            let lower = and!(v, 0b1111);
             let old = v;
-            let v = (upper >> 4) | (lower << 4);
+            let v = shift_right!(upper, 4) | shift_left!(lower, 4);
             cpu.set_flags(Instruction::from_opcode(OpCode::SWAP(reg)).unwrap(), old, v);
             v
         };
@@ -1738,6 +1742,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::{
+        and,
         consoles::{
             addressable::Addressable,
             bus::Bus,
@@ -1754,6 +1759,7 @@ mod tests {
             readable::Readable,
             writeable::Writeable,
         },
+        shift_left, shift_right,
         utils::conversion::u16_to_u8,
     };
 
@@ -1920,7 +1926,7 @@ mod tests {
                 cpu.registers.h = upper_byte;
                 cpu.registers.l = lower_byte;
             }
-            Target::SP => cpu.sp = ((upper_byte as u16) << 8) + lower_byte as u16,
+            Target::SP => cpu.sp = (shift_left!(upper_byte, 8, u16)) + lower_byte as u16,
             _ => panic!("Unsupported register"),
         }
 
@@ -1932,8 +1938,8 @@ mod tests {
                 assert_eq!(cpu.registers.l, expected_lower);
             }
             Target::SP => {
-                assert_eq!((cpu.sp >> 8) as u8, expeced_upper);
-                assert_eq!((cpu.sp & 0xFF) as u8, expected_lower);
+                assert_eq!(shift_right!(cpu.sp, 8, u8), expeced_upper);
+                assert_eq!(and!(cpu.sp, 0xFF, u8), expected_lower);
             }
             _ => panic!("Unsupported register"),
         }
@@ -2059,11 +2065,11 @@ mod tests {
         let _ = cpu
             .bus
             .borrow_mut()
-            .write(cpu.pc + 1, (address1 & 0b11111111) as u8);
-        let _ = cpu
-            .bus
-            .borrow_mut()
-            .write(cpu.pc + 2, ((address1 & 0b1111111100000000) >> 8) as u8);
+            .write(cpu.pc + 1, and!(address1, 0b11111111, u8));
+        let _ = cpu.bus.borrow_mut().write(
+            cpu.pc + 2,
+            shift_right!(and!(address1, 0b1111111100000000), 8, u8),
+        );
         assert!(cpu.call(Flag::NotZero));
         assert_eq!(cpu.pc, address1);
 
@@ -2317,8 +2323,11 @@ mod tests {
         let _ = cpu
             .bus
             .borrow_mut()
-            .write(cpu.pc + 1, (address & 0xFF) as u8);
-        let _ = cpu.bus.borrow_mut().write(cpu.pc + 2, (address >> 8) as u8);
+            .write(cpu.pc + 1, and!(address, 0xFF) as u8);
+        let _ = cpu
+            .bus
+            .borrow_mut()
+            .write(cpu.pc + 2, shift_right!(address, 8, u8));
         cpu.jp();
 
         assert_eq!(cpu.pc, 100);
