@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-mod gameboy {
+pub mod gameboy {
     use std::ops::RangeInclusive;
 
     pub const ROM_BANK_00: RangeInclusive<usize> = 0x0000..=0x3FFF;
