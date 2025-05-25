@@ -25,6 +25,16 @@ macro_rules! log {
 }
 
 #[macro_export]
+macro_rules! and {
+    ($e: expr, $bits: expr) => {
+        $e & $bits
+    };
+    ($e: expr, $bits: expr, $ty: ty) => {
+        ($e & $bits) as $ty
+    };
+}
+
+#[macro_export]
 macro_rules! shift_left {
     ($value: expr, $bits: expr) => {
         $value << $bits
