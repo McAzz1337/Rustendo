@@ -5,9 +5,11 @@ use super::super::console::Console;
 use super::gbcartridge::GbCartridge;
 use super::instruction::Instruction;
 use super::opcode::OpCode::EndOfProgram;
+use crate::consoles::addressable::Addressable;
 use crate::consoles::bus::Bus;
 use crate::consoles::gameboy::cpu::Cpu;
 use crate::consoles::memory::Memory;
+use crate::consoles::memory_map::gameboy::{ROM_BANK_00, WRAM};
 use crate::utils::conversion::u16_to_u8;
 
 pub type GbMemory = Memory<u16, u8, u16, 0x10000>;
@@ -18,12 +20,15 @@ pub struct GameBoy {
 }
 
 impl GameBoy {
-    pub fn new(cartridge: GbCartridge) -> GameBoy {
+    pub fn new(mut cartridge: GbCartridge) -> GameBoy {
+        cartridge.assign_address_range(ROM_BANK_00);
+
         let get_default_value = || Instruction::byte_from_opcode(EndOfProgram).unwrap();
         let memory = Rc::new(RefCell::new(GbMemory::new(
             u16_to_u8,
             Some(Box::new(get_default_value)),
         )));
+        memory.borrow_mut().assign_address_range(WRAM);
 
         let mut bus = GbBus::new();
         bus.connect_readable(memory.clone());
