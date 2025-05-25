@@ -1,6 +1,10 @@
 use crate::consoles::bus::Bus;
+use crate::consoles::memory_map::gameboy::WRAM;
 use crate::consoles::readable::Readable;
 use crate::consoles::writeable::Writeable;
+use crate::log;
+use ::function_name::named;
+
 #[allow(unused_imports)]
 use crate::utils::conversion::u16_to_u8;
 
@@ -11,6 +15,7 @@ extern crate libc;
 #[allow(unused_imports)]
 use super::registers::{CARRY_BIT_POS, HALF_CARRY_BIT_POS, SUB_BIT_POS, ZERO_BIT_POS};
 use std::cell::RefCell;
+use std::fmt::Display;
 use std::rc::Rc;
 
 use super::instruction::{FlagAction, Instruction};
@@ -37,7 +42,7 @@ impl Cpu {
             registers: Registers::new(),
             bus,
             pc: 0x100,
-            sp: 0xE000, // Check what value the stack pointer is initialised to
+            sp: *WRAM.start() as u16, // Check what value the stack pointer is initialised to
             addr: 0,
             is_prefixed: false,
             interrupts_enabled: true,
@@ -487,6 +492,7 @@ impl Cpu {
         self.pc.wrapping_sub(pc_increment)
     }
 
+    #[named]
     fn adc(&mut self, reg: Target) {
         let v = match reg {
             Target::A => self.registers.a,
@@ -517,6 +523,7 @@ impl Cpu {
         //     self.registers.a < 0b10000 && self.registers.a as u16 + v + carry > 0b1111,
         // );
         // self.registers.set_flag(Flag::Sub, false);
+        log!("carry: {carry} v: {v}");
         self.registers.a = self.registers.a.wrapping_add(v + carry);
 
         self.set_flags(
@@ -1698,6 +1705,13 @@ impl Cpu {
     }
 }
 
+impl Display for Cpu {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = format!("self.pc {}\n self.sp {}\n self.is_prefixed {}\n self.interrupts_enabled {}\n self.registers\n{}", self.pc, self.sp, self.is_prefixed, self.interrupts_enabled, self.registers);
+        write!(f, "{s}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::panic;
@@ -1707,6 +1721,7 @@ mod tests {
 
     use crate::{
         consoles::{
+            addressable::Addressable,
             bus::Bus,
             gameboy::{
                 cpu::Cpu,
@@ -1716,6 +1731,7 @@ mod tests {
                 target::Target,
             },
             memory::Memory,
+            memory_map::gameboy::WRAM,
             readable::Readable,
             writeable::Writeable,
         },
@@ -1728,6 +1744,8 @@ mod tests {
             u16_to_u8,
             Some(Box::new(get_default_value)),
         )));
+        memory.borrow_mut().assign_address_range(WRAM);
+
         let mut bus = Bus::<u16, u8, u16>::new();
         bus.connect_readable(memory.clone());
         bus.connect_writeable(memory);
@@ -1765,14 +1783,20 @@ mod tests {
             Target::H => cpu.registers.h = 1,
             Target::L => cpu.registers.l = 1,
             Target::HL => {
-                let _ = cpu.bus.borrow_mut().write(100, 1);
-                cpu.registers.set_combined_register(Target::HL, 100);
+                let _ = cpu.bus.borrow_mut().write(cpu.sp, 1);
+                cpu.registers.set_combined_register(Target::HL, cpu.sp);
             }
             _ => panic!("Unsupported register"),
         }
+        println!("pre cpu: {cpu}");
         cpu.adc(src);
+        println!("post cpu: {cpu}");
 
-        assert_eq!(cpu.registers.a, expected);
+        assert_eq!(
+            cpu.registers.a, expected,
+            "cpu.register.a: {} expected: {}, cpu: {}",
+            cpu.registers.a, expected, cpu
+        );
     }
 
     #[rstest]
