@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use super::target::Target;
 use crate::utils::conversion;
 
@@ -255,6 +257,16 @@ fn test_set_bit() {
     assert!(reg.a == 5);
     reg.set_bit(Target::A, &0, 0);
     assert!(reg.a == 4);
+}
+
+impl Display for Registers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = format!(
+            "a: {}\nb: {}\nc: {}\nd: {}\ne: {}\nh: {}\nl: {}\n",
+            self.a, self.b, self.c, self.d, self.e, self.h, self.l
+        );
+        write!(f, "{s}")
+    }
 }
 
 #[test]
