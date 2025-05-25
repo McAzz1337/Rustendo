@@ -2,6 +2,7 @@ mod addressable;
 mod bus;
 pub mod cartridge;
 pub mod console;
+pub mod fake_cartridge;
 mod gameboy;
 mod memory;
 mod memory_map;
