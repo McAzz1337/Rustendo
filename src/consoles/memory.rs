@@ -1,3 +1,4 @@
+use function_name::named;
 use std::error::Error;
 use std::fmt::{Debug, Display, LowerHex};
 use std::marker::PhantomData;
@@ -9,6 +10,7 @@ use crate::consoles::addressable::Addressable;
 use crate::consoles::bus::{ReadDevice, WriteDevice};
 use crate::consoles::readable::Readable;
 use crate::consoles::writeable::Writeable;
+use crate::log;
 #[allow(unused_imports)]
 use crate::utils::conversion::u16_to_u8;
 
@@ -54,7 +56,7 @@ where
         + NumCast
         + ToPrimitive
         + AsPrimitive<V>,
-    DV: NumCast + Shr<i32> + BitAnd<u16>,
+    DV: NumCast + Shr<i32> + BitAnd<u16> + Debug,
 {
     pub fn new(
         conversion: fn(DV) -> Option<(V, V)>,
@@ -95,7 +97,9 @@ where
     A: NumCast + AsPrimitive<A> + ToPrimitive + Debug,
     V: Copy,
 {
+    #[named]
     fn read(&self, address: A) -> Result<V, Box<dyn Error>> {
+        log!("address: {address:?}");
         match address.to_usize() {
             Some(address) => {
                 let index = address - self.address_range.start();
@@ -117,7 +121,7 @@ impl<A, V, DV, const N: usize> Writeable<A, V, DV> for Memory<A, V, DV, N>
 where
     A: NumCast + Clone + Copy + Debug + 'static,
     V: NumCast,
-    DV: NumCast + Shr<i32> + BitAnd<u16>,
+    DV: NumCast + Shr<i32> + BitAnd<u16> + Debug,
 {
     fn write(&mut self, address: A, data: V) -> Result<(), Box<dyn Error>> {
         match address.to_usize() {
@@ -130,13 +134,15 @@ where
         }
     }
 
+    #[named]
     fn write_16(&mut self, address: A, data: DV) -> Result<(), Box<dyn Error>> {
+        log!("address: {address:?} data: {data:?}");
         match address.to_usize() {
             Some(address) => match (self.conversion)(data) {
                 Some((upper, lower)) => {
                     let index = address - self.address_range.start();
-                    self.memory[index] = NumCast::from(upper).unwrap();
-                    self.memory[index + 1] = NumCast::from(lower).unwrap();
+                    self.memory[index] = NumCast::from(lower).unwrap();
+                    self.memory[index + 1] = NumCast::from(upper).unwrap();
                     Ok(())
                 }
                 None => todo!(),
@@ -150,7 +156,7 @@ impl<A, V, DV, const N: usize> WriteDevice<A, V, DV> for Memory<A, V, DV, N>
 where
     A: NumCast + Copy + Clone + Debug + 'static,
     V: NumCast,
-    DV: NumCast + Shr<i32> + BitAnd<u16>,
+    DV: NumCast + Shr<i32> + BitAnd<u16> + Debug,
 {
 }
 
