@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+extern crate function_name;
+
 pub mod consoles;
 pub mod filio;
 pub mod macros;
