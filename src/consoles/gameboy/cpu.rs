@@ -2,7 +2,7 @@ use crate::consoles::bus::Bus;
 use crate::consoles::memory_map::gameboy::WRAM;
 use crate::consoles::readable::Readable;
 use crate::consoles::writeable::Writeable;
-use crate::log;
+use crate::{log, trace};
 use ::function_name::named;
 
 #[allow(unused_imports)]
@@ -685,21 +685,40 @@ impl Cpu {
         );
     }
 
+    #[named]
     fn call(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            let _ = self
-                .bus
-                .borrow_mut()
-                .write(self.sp - 1, ((self.pc & 0b1111111100000000) >> 8) as u8);
-            let _ = self
-                .bus
-                .borrow_mut()
-                .write(self.sp, (self.pc & 0b11111111) as u8);
+            let mut bus = self.bus.borrow_mut();
+            let address = match bus.read(self.pc + 3) {
+                Ok(lower) => match bus.read(self.pc + 4) {
+                    Ok(higher) => ((higher as u16) << 8) | lower as u16,
+                    Err(e) => {
+                        println!("{e}");
+                        panic!()
+                    }
+                },
+                Err(e) => {
+                    println!("{e}");
+                    panic!()
+                }
+            };
 
-            self.sp = self.sp.wrapping_sub(2);
+            log!("address: {address}");
+            let _ = bus.write_16(self.sp, self.pc + 3);
 
-            self.pc = ((self.bus.borrow().read(self.pc + 2).unwrap() as u16) << 8)
-                | self.bus.borrow().read(self.pc + 1).unwrap() as u16;
+            self.pc = match bus.read(self.pc + 1) {
+                Ok(lower) => match bus.read(self.pc + 2) {
+                    Ok(upper) => (upper as u16) << 8 | lower as u16,
+                    Err(e) => {
+                        println!("{e}");
+                        panic!()
+                    }
+                },
+                Err(e) => {
+                    println!("{e}");
+                    panic!()
+                }
+            };
 
             true
         } else {
@@ -1130,7 +1149,7 @@ impl Cpu {
         let _ = bus.write(self.sp, (v & 0b11111111) as u8);
         let _ = bus.write(self.sp - 1, ((v & 0b1111111100000000) >> 8) as u8);
 
-        self.sp = self.sp.wrapping_sub(2);
+        self.sp -= 2;
     }
 
     fn res(&mut self, bit: u8, reg: Target) {
@@ -1157,9 +1176,8 @@ impl Cpu {
 
     fn ret(&mut self, flag: Flag) -> bool {
         if self.registers.get_flag(flag) {
-            self.pc = ((self.bus.borrow().read(self.sp + 1).unwrap() as u16) << 8)
-                | (self.bus.borrow().read(self.sp + 2).unwrap() as u16);
-            self.sp = self.sp.wrapping_add(2);
+            self.pc = ((self.bus.borrow().read(self.sp - 1).unwrap() as u16) << 8)
+                | (self.bus.borrow().read(self.sp - 2).unwrap() as u16);
 
             true
         } else {
@@ -1723,6 +1741,7 @@ mod tests {
         consoles::{
             addressable::Addressable,
             bus::Bus,
+            fake_cartridge::FakeCartridge,
             gameboy::{
                 cpu::Cpu,
                 instruction::Instruction,
@@ -1731,7 +1750,7 @@ mod tests {
                 target::Target,
             },
             memory::Memory,
-            memory_map::gameboy::WRAM,
+            memory_map::gameboy::{ROM_BANK_00, WRAM},
             readable::Readable,
             writeable::Writeable,
         },
@@ -1739,6 +1758,8 @@ mod tests {
     };
 
     fn setup() -> Cpu {
+        let mut bus = Bus::<u16, u8, u16>::new();
+
         let get_default_value = || Instruction::byte_from_opcode(EndOfProgram).unwrap();
         let memory = Rc::new(RefCell::new(Memory::<u16, u8, u16, 0x10000>::new(
             u16_to_u8,
@@ -1746,11 +1767,17 @@ mod tests {
         )));
         memory.borrow_mut().assign_address_range(WRAM);
 
-        let mut bus = Bus::<u16, u8, u16>::new();
         bus.connect_readable(memory.clone());
         bus.connect_writeable(memory);
+        let mut cartridge = FakeCartridge::new();
+
+        cartridge.assign_address_range(ROM_BANK_00);
+        let cartridge = Rc::new(RefCell::new(cartridge));
+        bus.connect_readable(cartridge.clone());
+        bus.connect_writeable(cartridge);
+
         let bus = Rc::new(RefCell::new(bus));
-        Cpu::new(bus.clone())
+        Cpu::new(bus)
     }
 
     #[rstest]
@@ -1840,8 +1867,8 @@ mod tests {
             Target::H => cpu.registers.h = val_b,
             Target::L => cpu.registers.l = val_b,
             Target::HL => {
-                let _ = cpu.bus.borrow_mut().write(100, val_b);
-                cpu.registers.set_combined_register(Target::HL, 100);
+                let _ = cpu.bus.borrow_mut().write(cpu.sp, val_b);
+                cpu.registers.set_combined_register(Target::HL, cpu.sp);
             }
             _ => panic!("Unsupported register"),
         }
@@ -1952,8 +1979,8 @@ mod tests {
             Target::H => cpu.registers.h = src_value,
             Target::L => cpu.registers.l = src_value,
             Target::HL => {
-                let _ = cpu.bus.borrow_mut().write(100, src_value);
-                cpu.registers.set_combined_register(Target::HL, 100);
+                let _ = cpu.bus.borrow_mut().write(cpu.sp, src_value);
+                cpu.registers.set_combined_register(Target::HL, cpu.sp);
             }
             _ => panic!("Unsupported register"),
         }
@@ -2003,8 +2030,8 @@ mod tests {
             Target::H => cpu.registers.h = value,
             Target::L => cpu.registers.l = value,
             Target::HL => {
-                let _ = cpu.bus.borrow_mut().write(100, value);
-                cpu.registers.set_combined_register(Target::HL, 100);
+                let _ = cpu.bus.borrow_mut().write(cpu.sp, value);
+                cpu.registers.set_combined_register(Target::HL, cpu.sp);
             }
             _ => panic!("Unsupported register"),
         }
@@ -2023,9 +2050,11 @@ mod tests {
     fn test_call_and_ret() {
         let mut cpu = setup();
 
-        eprintln!("pc = {}", cpu.pc);
+        eprintln!("pc = {} sp = {}", cpu.pc, cpu.sp);
         let address1 = cpu.pc + 10;
-        let address2 = cpu.pc;
+        let address2 = cpu.pc + 3;
+
+        let _ = cpu.bus.borrow_mut().write_16(1, address1);
 
         let _ = cpu
             .bus
@@ -2037,6 +2066,8 @@ mod tests {
             .write(cpu.pc + 2, ((address1 & 0b1111111100000000) >> 8) as u8);
         assert!(cpu.call(Flag::NotZero));
         assert_eq!(cpu.pc, address1);
+
+        cpu.sp += 2;
 
         assert!(cpu.ret(Flag::NotZero));
         assert_eq!(cpu.pc, address2);
@@ -2425,6 +2456,7 @@ mod tests {
     #[test]
     fn test_push_and_pop() {
         let mut cpu = setup();
+        cpu.sp += 2;
 
         cpu.registers
             .set_combined_register(Target::HL, 0b1000100000010001);
