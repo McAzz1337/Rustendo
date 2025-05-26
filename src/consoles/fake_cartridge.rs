@@ -63,7 +63,7 @@ impl Writeable<u16, u8, u16> for FakeCartridge {
         let upper = shift_right!(data, 8, u8);
         let lower = (data & 0xFF) as u8;
         self.data[address as usize] = lower;
-        self.data[address as usize] = upper;
+        self.data[(address + 1) as usize] = upper;
         Ok(())
     }
 }
