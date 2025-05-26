@@ -231,8 +231,8 @@ lazy_static! {
         m.insert(0x7F as  u8, Instruction::new(OpCode::LD(Target::A, Target::A), 1, 4, 0, FlagAffection::not_affected()));
 
         // LDH and so
-        m.insert(0xE0 as  u8, Instruction::new(OpCode::LD(Target::A8, Target::A), 2, 12, 0, FlagAffection::not_affected()));
-        m.insert(0xF0 as  u8, Instruction::new(OpCode::LD(Target::A, Target::A8), 2, 12, 0, FlagAffection::not_affected()));
+        m.insert(0xE0 as  u8, Instruction::new(OpCode::LDH(Target::A8, Target::A), 2, 12, 0, FlagAffection::not_affected()));
+        m.insert(0xF0 as  u8, Instruction::new(OpCode::LDH(Target::A, Target::A8), 2, 12, 0, FlagAffection::not_affected()));
 
         m.insert(0xE2 as  u8, Instruction::new(OpCode::LD(Target::C, Target::A), 2, 8, 0, FlagAffection::not_affected()));
         m.insert(0xF2 as  u8, Instruction::new(OpCode::LD(Target::A, Target::C), 2, 8, 0, FlagAffection::not_affected()));
