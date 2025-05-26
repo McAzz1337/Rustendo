@@ -138,16 +138,16 @@ where
     fn write_16(&mut self, address: A, data: DV) -> Result<(), Box<dyn Error>> {
         log!("address: {address:?} data: {data:?}");
         match address.to_usize() {
-            Some(address) => match (self.conversion)(data) {
+            Some(addr) => match (self.conversion)(data) {
                 Some((upper, lower)) => {
-                    let index = address - self.address_range.start();
+                    let index = addr - self.address_range.start();
                     self.memory[index] = NumCast::from(lower).unwrap();
                     self.memory[index + 1] = NumCast::from(upper).unwrap();
                     Ok(())
                 }
-                None => todo!(),
+                None => Err(Box::new(MemoryError::WriteError::<A>(address))),
             },
-            None => todo!(),
+            None => Err(Box::new(MemoryError::WriteError::<A>(address))),
         }
     }
 }
