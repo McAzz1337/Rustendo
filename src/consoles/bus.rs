@@ -13,8 +13,8 @@ enum BusError<A>
 where
     A: ToPrimitive,
 {
-    ReadError(A),
-    WriteError(A),
+    BusReadError(A),
+    BusWriteError(A),
 }
 
 impl<A> Display for BusError<A>
@@ -23,8 +23,8 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            BusError::ReadError(addr) => format!("{}{}", "Failed to read from address: ", addr),
-            BusError::WriteError(addr) => format!("{}{}", "Failed to write to address: ", addr),
+            BusError::BusReadError(addr) => format!("{}{}", "Failed to read from address: ", addr),
+            BusError::BusWriteError(addr) => format!("{}{}", "Failed to write to address: ", addr),
         };
         write!(f, "{}", s)
     }
@@ -62,7 +62,7 @@ where
         if let Some(readable) = self.readables.iter().find(|r| r.borrow().in_range(address)) {
             readable.borrow().read(address)
         } else {
-            Err(Box::new(BusError::ReadError::<A>(address)))
+            Err(Box::new(BusError::BusReadError::<A>(address)))
         }
     }
 }
@@ -80,7 +80,7 @@ where
             let _ = writeable.as_ref().borrow_mut().write(address, data);
             Ok(())
         } else {
-            Err(Box::new(BusError::WriteError::<A>(address)))
+            Err(Box::new(BusError::BusWriteError::<A>(address)))
         }
     }
 
@@ -93,7 +93,7 @@ where
             let _ = writeable.as_ref().borrow_mut().write_16(address, data);
             Ok(())
         } else {
-            Err(Box::new(BusError::WriteError::<A>(address)))
+            Err(Box::new(BusError::BusWriteError::<A>(address)))
         }
     }
 }
