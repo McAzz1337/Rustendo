@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use crate::{shift_left, shift_right};
+use crate::shift_right;
 
 use super::{
     addressable::Addressable,
