@@ -32,6 +32,22 @@ pub enum Flag {
     NotSub,
 }
 
+impl Display for Flag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Zero => "Zero ",
+            Self::Carry => "Carry ",
+            Self::HalfCarry => "HalfCarry ",
+            Self::Sub => "Sub ",
+            Self::NotZero => "NotZero ",
+            Self::NotCarry => "NotCarry ",
+            Self::NotHalfCarry => "NotHalfCarry ",
+            Self::NotSub => "NotSub ",
+        };
+        write!(f, "{s}")
+    }
+}
+
 impl Registers {
     pub fn new() -> Registers {
         Registers {
