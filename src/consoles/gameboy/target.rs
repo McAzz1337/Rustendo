@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
@@ -38,3 +40,33 @@ impl Target {
     }
 }
 
+impl Display for Target {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::A => "A",
+            Self::B => "B",
+            Self::C => "C",
+            Self::D => "D",
+            Self::E => "E",
+            Self::F => "F",
+            Self::L => "L",
+            Self::H => "H",
+            Self::HL => "HL",
+            Self::HLP => "HLP",
+            Self::HLM => "HLM",
+            Self::AF => "AF",
+            Self::BC => "BC",
+            Self::DE => "DE",
+            Self::R8 => "R8",
+            Self::R16 => "R16",
+            Self::D8 => "D8",
+            Self::D16 => "D16",
+            Self::A8 => "A8",
+            Self::A16 => "A16",
+            Self::SP => "SP",
+            Self::SP_R8 => "SP_R8",
+        };
+
+        write!(f, "{s}")
+    }
+}
