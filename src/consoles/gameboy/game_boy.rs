@@ -4,7 +4,7 @@ use std::rc::Rc;
 use super::super::console::Console;
 use super::gbcartridge::GbCartridge;
 use super::instruction::Instruction;
-use super::opcode::OpCode::EndOfProgram;
+use super::opcode::OpCode::NOP;
 use crate::consoles::addressable::Addressable;
 use crate::consoles::bus::Bus;
 use crate::consoles::gameboy::cpu::Cpu;
@@ -23,7 +23,7 @@ impl GameBoy {
     pub fn new(mut cartridge: GbCartridge) -> GameBoy {
         cartridge.assign_address_range(ROM_BANK_00);
 
-        let get_default_value = || Instruction::byte_from_opcode(EndOfProgram).unwrap();
+        let get_default_value = || Instruction::byte_from_opcode(NOP).unwrap();
         let memory = Rc::new(RefCell::new(GbMemory::new(
             u16_to_u8,
             Some(Box::new(get_default_value)),
