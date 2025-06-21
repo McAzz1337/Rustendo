@@ -2,7 +2,7 @@ use crate::consoles::bus::Bus;
 use crate::consoles::memory_map::gameboy::WRAM;
 use crate::consoles::readable::Readable;
 use crate::consoles::writeable::Writeable;
-use crate::{and, log, shift_left, shift_right, trace};
+use crate::{and, log, or, shift_left, shift_right, trace, xor};
 use ::function_name::named;
 
 #[allow(unused_imports)]
@@ -501,35 +501,16 @@ impl Cpu {
     #[named]
     fn adc(&mut self, reg: Target) {
         let v = match reg {
-            Target::A => self.registers.a,
-            Target::B => self.registers.b,
-            Target::C => self.registers.c,
-            Target::D => self.registers.d,
-            Target::E => self.registers.e,
-            Target::H => self.registers.h,
-            Target::L => self.registers.l,
             Target::HL => self
                 .bus
                 .borrow()
                 .read(self.registers.combined_register(reg))
                 .unwrap(),
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::ADC(reg)));
-            }
+            _ => self.registers.get_register(reg),
         };
 
         let carry = self.registers.filter_flag(Flag::Carry);
-        // self.registers
-        //     .set_flag(Flag::Zero, self.registers.a as u16 + v + carry == 256);
-        // self.registers
-        //     .set_flag(Flag::Carry, self.registers.a as u16 + v + carry > 255);
-        // self.registers.set_flag(
-        //     Flag::HalfCarry,
-        //     self.registers.a < 0b10000 && self.registers.a as u16 + v + carry > 0b1111,
-        // );
-        // self.registers.set_flag(Flag::Sub, false);
-        log!("carry: {carry} v: {v}");
         self.registers.a = self.registers.a.wrapping_add(v + carry);
 
         self.set_flags(
@@ -543,36 +524,16 @@ impl Cpu {
     fn add(&mut self, src: Target) {
         log!("src: {src}");
         let v = match src {
-            Target::A => self.registers.a,
-            Target::B => self.registers.b,
-            Target::C => self.registers.c,
-            Target::D => self.registers.d,
-            Target::E => self.registers.e,
-            Target::F => self.registers.f,
-            Target::L => self.registers.l,
-            Target::H => self.registers.h,
             Target::HL => self
                 .bus
                 .borrow()
                 .read(self.registers.combined_register(Target::HL))
                 .unwrap(),
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::ADD(src)));
-            }
+            _ => self.registers.get_register(src),
         };
 
-        // self.registers
-        //     .set_flag(Flag::Carry, self.registers.a as i32 + v as i32 > 255);
-
-        // self.registers.set_flag(
-        //     Flag::HalfCarry,
-        //     self.registers.a < 0b1111 && self.registers.a + v >= 0b1111,
-        // );
-
         self.registers.a = self.registers.a.wrapping_add(v);
-        // self.registers.set_flag(Flag::Zero, self.registers.a == 0);
-        // self.registers.set_flag(Flag::Sub, false);
 
         self.set_flags(
             Instruction::from_opcode(OpCode::ADD(src)).unwrap(),
@@ -632,14 +593,6 @@ impl Cpu {
         log!("src: {src}");
         let old = self.registers.a;
         match src {
-            // Target::A => self.registers.a,
-            Target::B => self.registers.a &= self.registers.b,
-            Target::C => self.registers.a &= self.registers.c,
-            Target::D => self.registers.a &= self.registers.d,
-            Target::E => self.registers.a &= self.registers.e,
-            Target::F => self.registers.a &= self.registers.f,
-            Target::L => self.registers.a &= self.registers.l,
-            Target::H => self.registers.a &= self.registers.h,
             Target::HL => {
                 self.registers.a &= self
                     .bus
@@ -649,13 +602,13 @@ impl Cpu {
             }
             Target::D8 => self.registers.a &= self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::AND(src)));
+                let new = and!(
+                    self.registers.get_register(Target::A),
+                    self.registers.get_register(src)
+                );
+                self.registers.set_register(Target::A, new);
             }
         }
-        // self.registers.set_flag(Flag::Zero, self.registers.a == 0);
-        // self.registers.set_flag(Flag::Sub, false);
-        // self.registers.set_flag(Flag::HalfCarry, true);
-        // self.registers.set_flag(Flag::Carry, false);
         self.set_flags(
             Instruction::from_opcode(OpCode::AND(src)).unwrap(),
             old,
@@ -665,24 +618,12 @@ impl Cpu {
 
     fn bit(&mut self, bit_pos: u8, reg: Target) {
         let v = match reg {
-            Target::A => self.registers.a,
-            Target::B => self.registers.b,
-            Target::C => self.registers.c,
-            Target::D => self.registers.d,
-            Target::E => self.registers.e,
-            Target::H => self.registers.h,
-            Target::L => self.registers.l,
             Target::HL => self
                 .bus
                 .borrow()
                 .read(self.registers.combined_register(Target::HL))
                 .unwrap(),
-            _ => {
-                unimplemented!(
-                    "Unimplemented {}",
-                    format!("{:#?}", OpCode::BIT(bit_pos, reg))
-                );
-            }
+            _ => self.registers.get_register(reg),
         };
         let bit = v & (1 << bit_pos);
 
@@ -742,30 +683,12 @@ impl Cpu {
 
     fn cp(&mut self, reg: Target) {
         let v = match reg {
-            Target::A => self.registers.a as u16,
-            Target::B => self.registers.b as u16,
-            Target::C => self.registers.c as u16,
-            Target::D => self.registers.d as u16,
-            Target::E => self.registers.e as u16,
-            Target::H => self.registers.h as u16,
-            Target::L => self.registers.l as u16,
             Target::HL => shift_left!(self.registers.h, 8, u16) | self.registers.l as u16,
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap() as u16,
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::CP(reg)));
-            }
+            _ => self.registers.get_register(reg) as u16,
         };
 
         let result = self.registers.a as u16 - v;
-        // self.registers.set_flag(Flag::Zero, result == 0);
-        // self.registers.set_flag(Flag::Sub, true);
-        // self.registers.set_flag(
-        //     Flag::HalfCarry,
-        //     self.registers.a > 0b1111 && result < 0b10000,
-        // );
-        // self.registers
-        //     .set_flag(Flag::Carry, (self.registers.a as u16) < v); {
-
         self.set_flags_16(
             Instruction::from_opcode(OpCode::CP(reg)).unwrap(),
             v,
@@ -805,24 +728,17 @@ impl Cpu {
     #[named]
     fn dec(&mut self, target: Target) {
         log!("target: {target}");
-        let f = |old: u8, cpu: &mut Cpu| {
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
             let new = (old).wrapping_sub(1);
             cpu.set_flags(
                 Instruction::from_opcode(OpCode::DEC(target)).unwrap(),
                 old,
                 new,
             );
-            new
+            cpu.registers.set_register(reg, new);
         };
         match target {
-            Target::A => self.registers.a = f(self.registers.a, self),
-            Target::B => self.registers.b = f(self.registers.b, self),
-            Target::C => self.registers.c = f(self.registers.c, self),
-            Target::D => self.registers.d = f(self.registers.d, self),
-            Target::E => self.registers.e = f(self.registers.e, self),
-            Target::F => self.registers.f = f(self.registers.f, self),
-            Target::L => self.registers.l = f(self.registers.l, self),
-            Target::H => self.registers.h = f(self.registers.h, self),
             Target::HL => {
                 let mut v = self.registers.combined_register(target);
                 // self.registers.set_flag(Flag::HalfCarry, v == 0b10000);
@@ -837,9 +753,7 @@ impl Cpu {
                     v,
                 );
             }
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::DEC(target)));
-            }
+            _ => f(target, self),
         };
 
         // self.registers.set_flag(Flag::HalfCarry, false);
@@ -872,24 +786,17 @@ impl Cpu {
     }
 
     fn inc(&mut self, target: Target) {
-        let f = |old: u8, cpu: &mut Cpu| {
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
             let new = old.wrapping_add(1);
             cpu.set_flags(
                 Instruction::from_opcode(OpCode::INC(target)).unwrap(),
                 old,
                 new,
             );
-            new
+            cpu.registers.set_register(reg, new);
         };
         match target {
-            Target::A => self.registers.a = f(self.registers.a, self),
-            Target::B => self.registers.b = f(self.registers.b, self),
-            Target::C => self.registers.c = f(self.registers.c, self),
-            Target::D => self.registers.d = f(self.registers.d, self),
-            Target::E => self.registers.e = f(self.registers.e, self),
-            Target::F => self.registers.f = f(self.registers.f, self),
-            Target::L => self.registers.l = f(self.registers.l, self),
-            Target::H => self.registers.h = f(self.registers.h, self),
             Target::HL => {
                 let mut v = self.registers.combined_register(target);
                 let old = v;
@@ -904,9 +811,7 @@ impl Cpu {
                     v,
                 );
             }
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::INC(target)));
-            }
+            _ => f(target, self),
         }
     }
 
@@ -981,14 +886,6 @@ impl Cpu {
     pub fn load(&mut self, dst: Target, src: Target) {
         log!("src: {src} dst: {dst}");
         let v = match src {
-            Target::A => self.registers.a,
-            Target::B => self.registers.b,
-            Target::C => self.registers.c,
-            Target::D => self.registers.d,
-            Target::E => self.registers.e,
-            Target::F => self.registers.f,
-            Target::L => self.registers.l,
-            Target::H => self.registers.h,
             Target::HL | Target::BC | Target::DE => self
                 .bus
                 .borrow()
@@ -1013,20 +910,10 @@ impl Cpu {
                 .read(self.pc + self.bus.borrow().read(self.pc + 1).unwrap() as u16)
                 .unwrap(),
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
-            }
+            _ => self.registers.get_register(src),
         };
 
         match dst {
-            Target::A => self.registers.a = v,
-            Target::B => self.registers.b = v,
-            Target::C => self.registers.c = v,
-            Target::D => self.registers.d = v,
-            Target::E => self.registers.e = v,
-            Target::F => self.registers.f = v,
-            Target::L => self.registers.l = v,
-            Target::H => self.registers.h = v,
             Target::HL => self.registers.set_combined_register(Target::HL, v as u16),
             Target::BC => self.registers.set_combined_register(Target::BC, v as u16),
             Target::DE => self.registers.set_combined_register(Target::DE, v as u16),
@@ -1041,9 +928,7 @@ impl Cpu {
                     | bus.read(self.pc + 2).unwrap() as u16;
                 let _ = bus.write(addr, v);
             }
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
-            }
+            _ => self.registers.set_register(dst, v),
         };
     }
     #[named]
@@ -1077,13 +962,6 @@ impl Cpu {
     pub fn load_16(&mut self, dst: Target, src: Target) {
         log!("src: {src} dst: {dst}");
         let v = match src {
-            Target::A => self.registers.a as u16,
-            Target::B => self.registers.b as u16,
-            Target::C => self.registers.c as u16,
-            Target::D => self.registers.d as u16,
-            Target::E => self.registers.e as u16,
-            Target::H => self.registers.h as u16,
-            Target::L => self.registers.l as u16,
             Target::HL | Target::BC | Target::DE => self
                 .bus
                 .borrow()
@@ -1113,9 +991,7 @@ impl Cpu {
                 .borrow()
                 .read(self.sp + self.bus.borrow().read(self.pc + 1).unwrap() as u16)
                 .unwrap() as u16,
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::LD(dst, src)));
-            }
+            _ => self.registers.get_register(src) as u16,
         };
 
         match dst {
@@ -1156,21 +1032,15 @@ impl Cpu {
         log!("src: {src}");
         let old = self.registers.a;
         match src {
-            Target::A => self.registers.a |= self.registers.a,
-            Target::B => self.registers.a |= self.registers.b,
-            Target::C => self.registers.a |= self.registers.c,
-            Target::D => self.registers.a |= self.registers.d,
-            Target::E => self.registers.a |= self.registers.e,
-            Target::F => self.registers.a |= self.registers.f,
-            Target::L => self.registers.a |= self.registers.l,
-            Target::H => self.registers.a |= self.registers.h,
             Target::HL => {
                 self.registers.a =
                     (self.registers.a as u16 | self.registers.combined_register(Target::HL)) as u8
             }
             Target::D8 => self.registers.a |= self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::OR(src)));
+                let v = self.registers.get_register(Target::A);
+                let bits = self.registers.get_register(src);
+                self.registers.set_register(Target::A, or!(v, bits));
             }
         }
 
@@ -1229,15 +1099,9 @@ impl Cpu {
         } else {
             let mask = !shift_left!(1, bit);
             match reg {
-                Target::A => self.registers.a &= mask,
-                Target::B => self.registers.b &= mask,
-                Target::C => self.registers.c &= mask,
-                Target::D => self.registers.d &= mask,
-                Target::E => self.registers.e &= mask,
-                Target::H => self.registers.h &= mask,
-                Target::L => self.registers.l &= mask,
                 _ => {
-                    unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RES(bit, reg)));
+                    let v = self.registers.get_register(reg);
+                    self.registers.set_register(reg, and!(v, mask));
                 }
             }
         }
@@ -1261,7 +1125,8 @@ impl Cpu {
         log!("");
         let msb = (self.registers.a & (1 << ZERO_BIT_POS)) >> ZERO_BIT_POS;
         let carry = self.registers.filter_flag(Flag::Carry);
-        self.registers.a = shift_left!(self.registers.a, 1) | carry;
+        self.registers
+            .set_register(Target::A, shift_left!(self.registers.a, 1) | carry);
         self.registers.set_flag(Flag::Carry, msb != 0);
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
         // Do not call self.set_flags()
@@ -1274,7 +1139,8 @@ impl Cpu {
             Flag::Carry,
             and!(self.registers.a, shift_left!(1, ZERO_BIT_POS)) != 0,
         );
-        self.registers.a = self.registers.a.rotate_left(1);
+        self.registers
+            .set_register(Target::A, self.registers.a.rotate_left(1));
 
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
         // Do not call self.set_flags()
@@ -1283,7 +1149,8 @@ impl Cpu {
     fn rra(&mut self) {
         let lsb = and!(self.registers.a, 1);
         let carry = self.registers.filter_flag(Flag::Carry) << ZERO_BIT_POS;
-        self.registers.a = shift_right!(self.registers.a, 1) | carry;
+        self.registers
+            .set_register(Target::A, shift_right!(self.registers.a, 1) | carry);
         self.registers.set_flag(Flag::Carry, lsb != 0);
         self.registers.set_flag(Flag::Zero, self.registers.a == 0);
         // Do not call self.set_flags()
@@ -1303,7 +1170,8 @@ impl Cpu {
     #[named]
     fn rl(&mut self, reg: Target) {
         log!("reg: {reg}");
-        let f = |old: u8, cpu: &mut Cpu| {
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
             let new_carry = shift_right!(old, 7);
             let old_carry = if cpu.registers.get_flag(Flag::Carry) {
                 1
@@ -1311,49 +1179,11 @@ impl Cpu {
                 0
             };
             cpu.registers.set_flag_from_u8(Flag::Carry, new_carry);
-            (old << 1) | old_carry
+            let new = (old << 1) | old_carry;
+            cpu.registers.set_register(reg, new);
+            cpu.set_flags(Instruction::from_opcode(OpCode::RL(reg)).unwrap(), old, new);
         };
-        let (old, new) = match reg {
-            Target::A => {
-                let old = self.registers.a;
-                self.registers.a = f(self.registers.a, self);
-                (old, self.registers.a)
-            }
-            Target::B => {
-                let old = self.registers.b;
-                self.registers.b = f(self.registers.b, self);
-                (old, self.registers.b)
-            }
-            Target::C => {
-                let old = self.registers.c;
-                self.registers.c = f(self.registers.c, self);
-                (old, self.registers.c)
-            }
-            Target::D => {
-                let old = self.registers.d;
-                self.registers.d = f(self.registers.d, self);
-                (old, self.registers.d)
-            }
-            Target::E => {
-                let old = self.registers.e;
-                self.registers.e = f(self.registers.e, self);
-                (old, self.registers.e)
-            }
-            Target::F => {
-                let old = self.registers.f;
-                self.registers.f = f(self.registers.f, self);
-                (old, self.registers.f)
-            }
-            Target::H => {
-                let old = self.registers.h;
-                self.registers.h = f(self.registers.h, self);
-                (old, self.registers.h)
-            }
-            Target::L => {
-                let old = self.registers.l;
-                self.registers.l = f(self.registers.l, self);
-                (old, self.registers.l)
-            }
+        match reg {
             Target::HL => {
                 let old = self.registers.combined_register(Target::HL);
                 let lower = old & 0b11111111;
@@ -1376,49 +1206,37 @@ impl Cpu {
                 self.registers.set_flag(Flag::Carry, new_carry > 0);
                 return;
             }
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RL(reg)));
-            }
+            _ => f(reg, self),
         };
-
-        self.set_flags(Instruction::from_opcode(OpCode::RL(reg)).unwrap(), old, new);
     }
 
     #[named]
     fn rlc(&mut self, reg: Target) {
         log!("reg: {reg}");
-        let f = |old: u8, cpu: &mut Cpu| {
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
             cpu.registers
                 .set_flag(Flag::Carry, (old & shift_left!(1, ZERO_BIT_POS)) != 0);
             let new = old.rotate_left(1);
             cpu.registers.set_flag(Flag::Zero, new == 0);
-            new
+            cpu.registers.set_register(reg, new);
         };
         match reg {
-            Target::A => self.registers.a = f(self.registers.a, self),
-            Target::B => self.registers.b = f(self.registers.b, self),
-            Target::C => self.registers.c = f(self.registers.c, self),
-            Target::D => self.registers.d = f(self.registers.d, self),
-            Target::E => self.registers.e = f(self.registers.e, self),
-            Target::F => self.registers.f = f(self.registers.f, self),
-            Target::H => self.registers.h = f(self.registers.h, self),
-            Target::L => self.registers.l = f(self.registers.l, self),
             Target::HL => {
                 let v = self.registers.combined_register(reg);
                 self.registers
                     .set_flag(Flag::Carry, (v & shift_left!(1, 15)) != 0);
                 self.registers.set_combined_register(reg, v.rotate_left(1));
             }
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RLC(reg)));
-            }
+            _ => f(reg, self),
         };
     }
 
     #[named]
     fn rr(&mut self, reg: Target) {
         log!("reg: {reg}");
-        let f = |old: u8, cpu: &mut Cpu| {
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
             let new_carry = old & 0b1;
             let old_carry = if cpu.registers.get_flag(Flag::Carry) {
                 println!("carry 1");
@@ -1429,62 +1247,20 @@ impl Cpu {
             };
             let new = shift_right!(old, 1) | shift_left!(old_carry, 7);
             cpu.registers.set_flag_from_u8(Flag::Carry, new_carry);
-            new
+            cpu.registers.set_register(reg, new);
+            cpu.set_flags(Instruction::from_opcode(OpCode::RR(reg)).unwrap(), old, new);
         };
-        let (old, new) = match reg {
-            Target::A => {
-                let old = self.registers.a;
-                self.registers.a = f(self.registers.a, self);
-                (old, self.registers.a)
-            }
-            Target::B => {
-                let old = self.registers.b;
-                self.registers.b = f(self.registers.b, self);
-                (old, self.registers.b)
-            }
-            Target::C => {
-                let old = self.registers.c;
-                self.registers.c = f(self.registers.c, self);
-                (old, self.registers.c)
-            }
-            Target::D => {
-                let old = self.registers.d;
-                self.registers.d = f(self.registers.d, self);
-                (old, self.registers.d)
-            }
-            Target::E => {
-                let old = self.registers.e;
-                self.registers.e = f(self.registers.e, self);
-                (old, self.registers.e)
-            }
-            Target::F => {
-                let old = self.registers.f;
-                self.registers.f = f(self.registers.f, self);
-                (old, self.registers.f)
-            }
-            Target::H => {
-                let old = self.registers.h;
-                self.registers.h = f(self.registers.h, self);
-                (old, self.registers.h)
-            }
-            Target::L => {
-                let old = self.registers.l;
-                self.registers.l = f(self.registers.l, self);
-                (old, self.registers.l)
-            }
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RR(reg)));
-            }
+        match reg {
+            _ => f(reg, self),
         };
-
-        self.set_flags(Instruction::from_opcode(OpCode::RR(reg)).unwrap(), old, new);
     }
 
     #[allow(unused_assignments)]
     #[named]
     fn rrc(&mut self, reg: Target) {
         log!("reg: {reg}");
-        let f = |old: u8, cpu: &mut Cpu| {
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
             let old_carry = if cpu.registers.get_flag(Flag::Carry) {
                 1
             } else {
@@ -1494,20 +1270,10 @@ impl Cpu {
             cpu.registers.set_flag(Flag::Carry, new_carry == 1);
             let new = shift_right!(old, 1) | shift_left!(old_carry, 7);
             cpu.registers.set_flag(Flag::Zero, new == 0);
-            new
+            cpu.registers.set_register(reg, new);
         };
         match reg {
-            Target::A => self.registers.a = f(self.registers.a, self),
-            Target::B => self.registers.b = f(self.registers.b, self),
-            Target::C => self.registers.c = f(self.registers.c, self),
-            Target::D => self.registers.d = f(self.registers.d, self),
-            Target::E => self.registers.e = f(self.registers.e, self),
-            Target::F => self.registers.f = f(self.registers.f, self),
-            Target::H => self.registers.h = f(self.registers.h, self),
-            Target::L => self.registers.l = f(self.registers.l, self),
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::RRC(reg)));
-            }
+            _ => f(reg, self),
         };
     }
 
@@ -1532,37 +1298,25 @@ impl Cpu {
     fn sbc(&mut self, reg: Target) {
         log!("reg: {reg}");
         let v = match reg {
-            Target::A => self.registers.a,
-            Target::B => self.registers.b,
-            Target::C => self.registers.c,
-            Target::D => self.registers.d,
-            Target::E => self.registers.e,
-            Target::H => self.registers.h,
-            Target::L => self.registers.l,
             Target::HL => self
                 .bus
                 .borrow()
                 .read(self.registers.combined_register(reg))
                 .unwrap(),
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SBC(reg)));
-            }
+            _ => self.registers.get_register(reg),
         };
 
         let carry = self.registers.filter_flag(Flag::Carry);
         let old = self.registers.a;
 
-        // self.registers.set_flag(Flag::Zero, self.registers.a == v);
-        // self.registers.set_flag(Flag::Sub, true);
-        // self.registers.set_flag(
-        //     Flag::Carry,
-        //     self.registers.a > 0b1111 && self.registers.a - v - carry < 0b10000,
-        // );
-        // self.registers
-        //     .set_flag(Flag::Zero, self.registers.a.lt(&(v + carry)));
-
-        self.registers.a = self.registers.a.wrapping_sub(v).wrapping_sub(carry) as u8;
+        self.registers.set_register(
+            Target::A,
+            self.registers
+                .get_register(Target::A)
+                .wrapping_sub(v)
+                .wrapping_sub(carry),
+        );
 
         self.set_flags(
             Instruction::from_opcode(OpCode::SBC(reg)).unwrap(),
@@ -1576,16 +1330,9 @@ impl Cpu {
         log!("bit: {bit} reg: {reg}");
         let mask = 1 << bit;
         match reg {
-            Target::A => self.registers.a |= mask,
-            Target::B => self.registers.b |= mask,
-            Target::C => self.registers.c |= mask,
-            Target::D => self.registers.d |= mask,
-            Target::E => self.registers.e |= mask,
-            Target::H => self.registers.h |= mask,
-            Target::L => self.registers.l |= mask,
-            // Target::HL => v = &mut self.registers.h,
             _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SET(bit, reg)));
+                let v = self.registers.get_register(reg);
+                self.registers.set_register(reg, or!(v, mask));
             }
         }
     }
@@ -1594,17 +1341,9 @@ impl Cpu {
     fn sl(&mut self, reg: Target) {
         log!("reg: {reg}");
         match reg {
-            Target::A => self.registers.a <<= 1,
-            Target::B => self.registers.b <<= 1,
-            Target::C => self.registers.c <<= 1,
-            Target::D => self.registers.d <<= 1,
-            Target::E => self.registers.e <<= 1,
-            Target::F => self.registers.f <<= 1,
-            Target::H => self.registers.h <<= 1,
-            Target::L => self.registers.l <<= 1,
-            _ => {
-                unimplemented!("Unimplemented SL, NOT SURE IF THIS INSTRUCTION EXISTS");
-            }
+            _ => self
+                .registers
+                .set_register(reg, shift_left!(self.registers.get_register(reg), 1)),
         }
     }
 
@@ -1612,67 +1351,49 @@ impl Cpu {
     #[named]
     fn sla(&mut self, reg: Target) {
         log!("reg: {reg}");
-        let f = |old: u8, cpu: &mut Cpu| {
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
             let bit = old & shift_left!(1, ZERO_BIT_POS);
             let new = shift_left!(old, 1);
             cpu.registers.set_flag(Flag::Carry, bit == 0);
             cpu.registers.set_flag(Flag::Zero, new == 0);
             cpu.registers.set_flag(Flag::HalfCarry, false);
             cpu.registers.set_flag(Flag::Sub, false);
-            new
+            cpu.registers.set_register(reg, new);
         };
 
         match reg {
-            Target::A => self.registers.a = f(self.registers.a, self),
-            Target::B => self.registers.b = f(self.registers.b, self),
-            Target::C => self.registers.c = f(self.registers.c, self),
-            Target::D => self.registers.d = f(self.registers.d, self),
-            Target::E => self.registers.e = f(self.registers.e, self),
-            Target::F => self.registers.f = f(self.registers.f, self),
-            Target::H => self.registers.h = f(self.registers.h, self),
-            Target::L => self.registers.l = f(self.registers.l, self),
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SLA(reg)));
-            }
+            _ => f(reg, self),
         };
     }
 
     #[named]
     fn srl(&mut self, reg: Target) {
         log!("reg: {reg}");
-        let f = |old: u8, cpu: &mut Cpu| {
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
             let lsb = and!(old, 1);
             let new = shift_right!(old, 1);
+            cpu.registers.set_register(reg, new);
             cpu.registers.set_flag(Flag::Zero, new == 0);
             cpu.registers.set_flag(Flag::Sub, false);
             cpu.registers.set_flag(Flag::Carry, lsb != 0);
             cpu.registers.set_flag(Flag::HalfCarry, false);
-            new
         };
 
         match reg {
-            Target::A => self.registers.a = f(self.registers.a, self),
-            Target::B => self.registers.b = f(self.registers.b, self),
-            Target::C => self.registers.c = f(self.registers.c, self),
-            Target::D => self.registers.d = f(self.registers.d, self),
-            Target::E => self.registers.e = f(self.registers.e, self),
-            Target::F => self.registers.f = f(self.registers.f, self),
-            Target::H => self.registers.h = f(self.registers.h, self),
-            Target::L => self.registers.l = f(self.registers.l, self),
             Target::HL => {
                 let mut v = self.registers.combined_register(reg);
-                let lsb = v & 1;
-                v >>= 1;
+                let lsb = and!(v, 1);
+                v = shift_right!(v, 1);
                 self.registers.set_flag(Flag::Zero, v == 0);
                 self.registers.set_flag(Flag::Sub, false);
                 self.registers.set_flag(Flag::Carry, lsb != 0);
                 self.registers.set_flag(Flag::HalfCarry, false);
                 self.registers.set_combined_register(reg, v);
-                return;
+                // return;
             }
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SRL(reg)));
-            }
+            _ => f(reg, self),
         };
     }
 
@@ -1681,27 +1402,18 @@ impl Cpu {
     fn sra(&mut self, reg: Target) {
         log!("reg: {reg}");
         let msb = |v: u8| v & shift_left!(1, ZERO_BIT_POS);
-        let f = |old: u8, cpu: &mut Cpu| {
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
             let lsb = and!(old, 1);
             let new = shift_right!(old, 1) | (msb(old));
             cpu.registers.set_flag(Flag::Zero, new == 0);
             cpu.registers.set_flag(Flag::Sub, false);
             cpu.registers.set_flag(Flag::Carry, lsb != 0);
             cpu.registers.set_flag(Flag::HalfCarry, false);
-            cpu.registers.a = new;
+            cpu.registers.set_register(Target::A, new);
         };
         match reg {
-            Target::A => f(self.registers.a, self),
-            Target::B => f(self.registers.b, self),
-            Target::C => f(self.registers.c, self),
-            Target::D => f(self.registers.d, self),
-            Target::E => f(self.registers.e, self),
-            Target::F => f(self.registers.f, self),
-            Target::H => f(self.registers.h, self),
-            Target::L => f(self.registers.l, self),
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SRA(reg)));
-            }
+            _ => f(reg, self),
         }
     }
 
@@ -1709,27 +1421,17 @@ impl Cpu {
     fn sub(&mut self, src: Target) {
         log!("src: {src}");
         let v = match src {
-            Target::A => self.registers.a,
-            Target::B => self.registers.b,
-            Target::C => self.registers.c,
-            Target::D => self.registers.d,
-            Target::E => self.registers.e,
-            Target::F => self.registers.f,
-            Target::L => self.registers.l,
-            Target::H => self.registers.h,
             Target::HL => self.registers.combined_register(Target::HL) as u8,
             Target::D8 => self.bus.borrow().read(self.pc + 1).unwrap(),
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SUB(src)));
-            }
+            _ => self.registers.get_register(src),
         };
 
-        // self.registers.set_flag(Flag::Zero, v >= self.registers.a);
         let old = self.registers.a;
-        self.registers.a = self.registers.a.wrapping_sub(v);
-        // self.registers.set_flag(Flag::Sub, true);
-        // self.registers.set_flag(Flag::HalfCarry, false);
-        // self.registers.set_flag(Flag::Carry, false);
+        self.registers.set_register(
+            Target::A,
+            self.registers.get_register(Target::A).wrapping_sub(v),
+        );
+
         self.set_flags(
             Instruction::from_opcode(OpCode::SUB(src)).unwrap(),
             old,
@@ -1740,26 +1442,17 @@ impl Cpu {
     #[named]
     fn swap(&mut self, reg: Target) {
         log!("reg: {reg}");
-        let f = |v: u8, cpu: &mut Cpu| {
-            let upper = and!(v, shift_left!(0b1111, 4));
-            let lower = and!(v, 0b1111);
-            let old = v;
+        let f = |reg: Target, cpu: &mut Cpu| {
+            let old = cpu.registers.get_register(reg);
+            let upper = and!(old, shift_left!(0b1111, 4));
+            let lower = and!(old, 0b1111);
+            // let old = v;
             let v = shift_right!(upper, 4) | shift_left!(lower, 4);
             cpu.set_flags(Instruction::from_opcode(OpCode::SWAP(reg)).unwrap(), old, v);
-            v
+            cpu.registers.set_register(reg, v);
         };
         match reg {
-            Target::A => self.registers.a = f(self.registers.a, self),
-            Target::B => self.registers.b = f(self.registers.b, self),
-            Target::C => self.registers.c = f(self.registers.c, self),
-            Target::D => self.registers.d = f(self.registers.d, self),
-            Target::E => self.registers.e = f(self.registers.e, self),
-            Target::F => self.registers.f = f(self.registers.f, self),
-            Target::L => self.registers.l = f(self.registers.l, self),
-            Target::H => self.registers.h = f(self.registers.h, self),
-            _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::SWAP(reg)));
-            }
+            _ => f(reg, self),
         }
     }
 
@@ -1768,14 +1461,6 @@ impl Cpu {
         log!("src: {src}");
         let old = self.registers.a;
         match src {
-            Target::A => self.registers.a = 0,
-            Target::B => self.registers.a ^= self.registers.b,
-            Target::C => self.registers.a ^= self.registers.c,
-            Target::D => self.registers.a ^= self.registers.d,
-            Target::E => self.registers.a ^= self.registers.e,
-            Target::F => self.registers.a ^= self.registers.f,
-            Target::L => self.registers.a ^= self.registers.l,
-            Target::H => self.registers.a ^= self.registers.h,
             Target::HL => {
                 self.registers.a ^= self
                     .bus
@@ -1785,7 +1470,9 @@ impl Cpu {
             }
             Target::D8 => self.registers.a ^= self.bus.borrow().read(self.pc + 1).unwrap(),
             _ => {
-                unimplemented!("Unimplemented {}", format!("{:#?}", OpCode::XOR(src)));
+                let bits = self.registers.get_register(src);
+                let v = self.registers.get_register(Target::A);
+                self.registers.set_register(Target::A, xor!(v, bits));
             }
         }
 
