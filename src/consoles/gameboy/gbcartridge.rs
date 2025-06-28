@@ -69,7 +69,7 @@ impl Cartridge for GbCartridge {
         self.data
             .iter()
             .map(u8::to_string)
-            .fold(String::new(), |a, b| a + b.as_str())
+            .fold(String::new(), |a, b| a + b.as_str() + "\n")
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
