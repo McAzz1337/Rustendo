@@ -166,6 +166,31 @@ impl Registers {
         }
     }
 
+    pub fn get_register(&self, reg: Target) -> u8 {
+        match reg {
+            Target::A => self.a,
+            Target::B => self.b,
+            Target::C => self.c,
+            Target::D => self.d,
+            Target::E => self.e,
+            Target::H => self.h,
+            Target::L => self.l,
+            _ => panic!("Invalid 8 bit register requesterd!"),
+        }
+    }
+
+    pub fn set_register(&mut self, reg: Target, value: u8) {
+        match reg {
+            Target::A => self.a = value,
+            Target::B => self.b = value,
+            Target::C => self.c = value,
+            Target::D => self.d = value,
+            Target::E => self.e = value,
+            Target::H => self.h = value,
+            Target::L => self.l = value,
+            _ => panic!("Invalid 8 bit register requesterd!"),
+        }
+    }
     pub fn combined_register(&self, reg: Target) -> u16 {
         match reg {
             Target::HL => ((self.h as u16) << 8) | self.l as u16,
