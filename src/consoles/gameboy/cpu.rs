@@ -1508,7 +1508,10 @@ impl Cpu {
 
 impl Display for Cpu {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = format!("self.pc {}\n self.sp {}\n self.is_prefixed {}\n self.interrupts_enabled {}\n self.registers\n{}", self.pc, self.sp, self.is_prefixed, self.interrupts_enabled, self.registers);
+        let s = format!(
+            "self.pc {}\n self.sp {}\n self.is_prefixed {}\n self.interrupts_enabled {}\n self.registers\n{}",
+            self.pc, self.sp, self.is_prefixed, self.interrupts_enabled, self.registers
+        );
         write!(f, "{s}")
     }
 }
@@ -2228,8 +2231,6 @@ mod tests {
             Target::A8 => {
                 let mut bus = cpu.bus.borrow_mut();
                 let _ = bus.write(cpu.pc + 1, 5);
-                let addr = 0xFF00 + bus.read(cpu.pc + 1).unwrap() as u16;
-                let _ = bus.write(addr, 5);
             }
             _ => panic!("Unsupported register"),
         }
@@ -2239,11 +2240,7 @@ mod tests {
 
         let res = match dst {
             Target::A => cpu.registers.a,
-            Target::A8 => cpu
-                .bus
-                .borrow()
-                .read(0xFF00 + cpu.bus.borrow().read(cpu.pc + 1).unwrap() as u16)
-                .unwrap(),
+            Target::A8 => cpu.bus.borrow().read(0xFF05).unwrap(),
             _ => panic!("Unsupported register"),
         };
 
