@@ -41,7 +41,7 @@ impl Cpu {
         Cpu {
             registers: Registers::new(),
             bus,
-            pc: 0x100,
+            pc: 0x0,
             sp: *WRAM.start() as u16, // Check what value the stack pointer is initialised to
             addr: 0,
             is_prefixed: false,
@@ -284,6 +284,11 @@ impl Cpu {
 
         let pc_increment: u16 =
             if let Some(instruction) = Instruction::fetch(instruction_byte, self.is_prefixed) {
+                println!(
+                    "Pc: {}, Byte: {instruction_byte}, char: {}",
+                    self.pc, instruction_byte as char
+                );
+                println!("Instruction: {instruction:?}");
                 self.is_prefixed = false;
                 self.execute(instruction)
             } else {
@@ -302,10 +307,9 @@ impl Cpu {
         let mut pc_increment = instruction.length as u16;
         let mut cycles = instruction.cycles;
 
-        let opcode = instruction.opcode.to_owned();
         let optional_cycles = instruction.optional_cycles;
 
-        match opcode {
+        match instruction.opcode {
             OpCode::ADC(target) => {
                 self.adc(target);
             }
@@ -495,7 +499,7 @@ impl Cpu {
             }
         }
 
-        self.pc.wrapping_sub(pc_increment)
+        self.pc.wrapping_add(pc_increment)
     }
 
     #[named]
@@ -843,7 +847,8 @@ impl Cpu {
         log!();
         let lower_byte = self.bus.borrow().read(self.pc + 1).unwrap() as u16;
         let upper_byte = self.bus.borrow().read(self.pc + 2).unwrap() as u16;
-        self.pc = (upper_byte << 8) + lower_byte
+        self.pc = (upper_byte << 8) + lower_byte;
+        println!("pc: {}", self.pc);
     }
 
     #[named]
