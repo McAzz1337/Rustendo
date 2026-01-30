@@ -11,11 +11,12 @@ pub mod utils;
 
 use std::error::Error;
 
-use consoles::cartridge::create_catridge;
-use consoles::console::{create_console_for, Console};
+use consoles::cartridge::{Cartridge, create_catridge};
+use consoles::console::{Console, create_console_for};
 
 fn init_console_and_cartridge(path: &str) -> Result<impl Console, Box<dyn Error>> {
     let cartridge = create_catridge(path)?;
+    // println!("{}", cartridge.dump());
     create_console_for(cartridge)
 }
 
